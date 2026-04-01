@@ -22,6 +22,7 @@ library(ggplot2)
 library(smooth)
 library(zoo)
 library(kableExtra)
+library(tidyr)
 
 ```
 
@@ -99,5 +100,89 @@ ggplot(warbler_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
 
 
 ```
+
+```{r}
+#Compute mean and standard deviation without missing values
+goose_mean_obs <- mean(na.exclude(canada_goose_data$sum_obs))  #exclude NA or missing observation to compute mean and std
+goose_sd_obs <- sd(na.exclude(canada_goose_data$sum_obs))
+
+cat(goose_mean_obs,goose_sd_obs)
+
+ggplot(canada_goose_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+            geom_line() +
+            geom_abline(slope=0,intercept=3*goose_sd_obs,color="red") +
+            geom_abline(slope=0,intercept=-3*goose_sd_obs,color="red")
+```
+```{r}
+
+humm_mean_obs <- mean(na.exclude(hummingbird_data$sum_obs))  #exclude NA or missing observation to compute mean and std
+humm_sd_obs <- sd(na.exclude(hummingbird_data$sum_obs))
+
+cat(humm_mean_obs,humm_sd_obs)
+
+ggplot(hummingbird_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+            geom_line() +
+            geom_abline(slope=0,intercept=3*humm_sd_obs,color="red") +
+            geom_abline(slope=0,intercept=-3*humm_sd_obs,color="red")
+
+```
+
+
+
+
+```{r}
+
+warb_mean_obs <- mean(na.exclude(warbler_data$sum_obs))  #exclude NA or missing observation to compute mean and std
+warb_sd_obs <- sd(na.exclude(warbler_data$sum_obs))
+
+cat(warb_mean_obs,warb_sd_obs)
+
+ggplot(warbler_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+            geom_line() +
+            geom_abline(slope=0,intercept=3*warb_sd_obs,color="red") +
+            geom_abline(slope=0,intercept=-3*warb_sd_obs,color="red")
+
+```
+
+
+
+```{r}
+
+min_warb_date <- warbler_data$OBSERVATION.DATE[1]
+max_warb_date <- warbler_data$OBSERVATION.DATE[nrow(warbler_data)]
+
+warbler_date_fill <- warbler_data %>%
+  complete(OBSERVATION.DATE = seq(min_warb_date,
+                                 max_warb_date,
+                                 by = "1 day")) %>% 
+  mutate(sum_obs = ifelse(is.na(sum_obs) , 0, sum_obs))
+
+warbler_ts <- ts(warbler_date_fill$sum_obs, start = c(2002, 51), frequency = 365)
+
+autoplot(warbler_ts)
+
+
+library(zoo)
+
+warbler_zoo <- zoo(warbler_date_fill$sum_obs,
+                   order.by = warbler_date_fill$OBSERVATION.DATE)
+
+warbler_ts <- as.ts(warbler_zoo)
+
+autoplot(warbler_ts)
+
+
+
+warbler_clean <- tsclean(warbler_ts)
+
+autoplot(warbler_clean)
+```
+
+
+
+
+
+
+
 
 
