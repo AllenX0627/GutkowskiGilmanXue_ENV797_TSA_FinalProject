@@ -1,0 +1,103 @@
+---
+title: "Cleaning_Data"
+output: html_document
+date: "2026-04-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(forecast)
+library(Kendall)
+library(tseries)
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(cowplot)
+library(lubridate)
+library(ggplot2)
+library(smooth)
+library(zoo)
+library(kableExtra)
+
+```
+
+
+```{r}
+
+bird_data <- read.csv("./Data/Raw/eBird_Species_Data.csv")
+
+```
+
+
+## Data Cleaning
+
+
+```{r}
+warbler_data <- bird_data %>% 
+  filter(COMMON.NAME == "Yellow-rumped Warbler") %>%
+  mutate(
+     OBSERVATION.DATE = as.Date(OBSERVATION.DATE),
+     OBSERVATION.COUNT = ifelse(OBSERVATION.COUNT == "X", 1, OBSERVATION.COUNT),
+     OBSERVATION.COUNT = as.numeric(OBSERVATION.COUNT)) %>%
+  group_by(OBSERVATION.DATE) %>% 
+  summarise(sum_obs = sum(OBSERVATION.COUNT, na.rm = TRUE))
+  
+ggplot(warbler_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Yellow-rumped Warbler Observations Over Time",
+    x = "Date",
+    y = "Total Observations"
+  )
+  #xlim(as.Date("2020-01-01"), as.Date("2022-12-31"))
+
+```
+
+```{r}
+
+canada_goose_data <- bird_data %>% 
+  filter(COMMON.NAME == "Canada Goose") %>%
+  mutate(
+     OBSERVATION.DATE = as.Date(OBSERVATION.DATE),
+     OBSERVATION.COUNT = ifelse(OBSERVATION.COUNT == "X", 1, OBSERVATION.COUNT),
+     OBSERVATION.COUNT = as.numeric(OBSERVATION.COUNT)) %>%
+  group_by(OBSERVATION.DATE) %>% 
+  summarise(sum_obs = sum(OBSERVATION.COUNT, na.rm = TRUE))
+  
+ggplot(warbler_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Canada Goose Observations Over Time",
+    x = "Date",
+    y = "Total Observations"
+  )
+
+
+```
+
+```{r}
+hummingbird_data <- bird_data %>% 
+  filter(COMMON.NAME == "Ruby-throated Hummingbird") %>%
+  mutate(
+     OBSERVATION.DATE = as.Date(OBSERVATION.DATE),
+     OBSERVATION.COUNT = ifelse(OBSERVATION.COUNT == "X", 1, OBSERVATION.COUNT),
+     OBSERVATION.COUNT = as.numeric(OBSERVATION.COUNT)) %>%
+  group_by(OBSERVATION.DATE) %>% 
+  summarise(sum_obs = sum(OBSERVATION.COUNT, na.rm = TRUE))
+  
+ggplot(warbler_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Ruby-throated Hummingbird Observations Over Time",
+    x = "Date",
+    y = "Total Observations"
+  )
+
+
+```
+
+
