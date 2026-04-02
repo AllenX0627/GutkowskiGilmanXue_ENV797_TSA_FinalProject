@@ -1,0 +1,367 @@
+---
+title: "Cleaning_Data"
+output: html_document
+date: "2026-04-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(forecast)
+library(Kendall)
+library(tseries)
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(cowplot)
+library(lubridate)
+library(ggplot2)
+library(smooth)
+library(zoo)
+library(kableExtra)
+library(tidyr)
+
+```
+
+
+```{r}
+
+bird_data <- read.csv("./Data/Raw/eBird_Species_Data.csv")
+
+```
+
+
+## Data Cleaning
+
+
+```{r}
+warbler_data <- bird_data %>% 
+  filter(COMMON.NAME == "Yellow-rumped Warbler") %>%
+  mutate(
+     OBSERVATION.DATE = as.Date(OBSERVATION.DATE),
+     OBSERVATION.COUNT = ifelse(OBSERVATION.COUNT == "X", 1, OBSERVATION.COUNT),
+     OBSERVATION.COUNT = as.numeric(OBSERVATION.COUNT)) %>%
+  group_by(OBSERVATION.DATE) %>% 
+  summarise(sum_obs = sum(OBSERVATION.COUNT, na.rm = TRUE))
+  
+ggplot(warbler_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Yellow-rumped Warbler Observations Over Time",
+    x = "Date",
+    y = "Total Observations"
+  )
+  #xlim(as.Date("2020-01-01"), as.Date("2022-12-31"))
+
+```
+
+```{r}
+
+canada_goose_data <- bird_data %>% 
+  filter(COMMON.NAME == "Canada Goose") %>%
+  mutate(
+     OBSERVATION.DATE = as.Date(OBSERVATION.DATE),
+     OBSERVATION.COUNT = ifelse(OBSERVATION.COUNT == "X", 1, OBSERVATION.COUNT),
+     OBSERVATION.COUNT = as.numeric(OBSERVATION.COUNT)) %>%
+  group_by(OBSERVATION.DATE) %>% 
+  summarise(sum_obs = sum(OBSERVATION.COUNT, na.rm = TRUE))
+  
+ggplot(warbler_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Canada Goose Observations Over Time",
+    x = "Date",
+    y = "Total Observations"
+  )
+
+
+```
+
+```{r}
+hummingbird_data <- bird_data %>% 
+  filter(COMMON.NAME == "Ruby-throated Hummingbird") %>%
+  mutate(
+     OBSERVATION.DATE = as.Date(OBSERVATION.DATE),
+     OBSERVATION.COUNT = ifelse(OBSERVATION.COUNT == "X", 1, OBSERVATION.COUNT),
+     OBSERVATION.COUNT = as.numeric(OBSERVATION.COUNT)) %>%
+  group_by(OBSERVATION.DATE) %>% 
+  summarise(sum_obs = sum(OBSERVATION.COUNT, na.rm = TRUE))
+  
+ggplot(warbler_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Ruby-throated Hummingbird Observations Over Time",
+    x = "Date",
+    y = "Total Observations"
+  )
+
+
+```
+
+
+## creating the canada goose dataframe: 
+
+```{r}
+
+## creating the warbler dataframe: 
+warbler_monthly <- warbler_data %>%
+  mutate(
+    date = floor_date(OBSERVATION.DATE, unit = "month")) %>%
+  group_by(date) %>%
+  summarise(
+    mean_obs = mean(sum_obs, na.rm = TRUE),
+    .groups = "drop")
+
+min_warb_date <- warbler_monthly$date[1]
+max_warb_date <- warbler_monthly$date[nrow(warbler_monthly)]
+
+
+warbler_monthly <- warbler_monthly %>% 
+  complete(date = seq(min_warb_date,
+                                 max_warb_date,
+                                 by = "1 month")) %>% 
+  mutate(mean_obs = ifelse(is.na(mean_obs) , 0, mean_obs))
+
+
+################################################################################
+#write_csv(warbler_monthly, "./Data/Cleaned_bySpecies/Warbler_Monthly.csv")
+
+
+
+### Checking to see what the data looks like: 
+
+ggplot(warbler_monthly, aes(x = date, y = mean_obs)) +
+  geom_line() +
+  labs(
+    title = "Warbler Monthly Obs",
+    x = "Date",
+    y = "Total Observations"
+  )
+```
+
+
+## creating the canada goose dataframe: 
+
+
+```{r}
+
+## creating the canada goose dataframe: 
+goose_monthly <- canada_goose_data %>%
+  mutate(
+    date = floor_date(OBSERVATION.DATE, unit = "month")) %>%
+  group_by(date) %>%
+  summarise(
+    mean_obs = mean(sum_obs, na.rm = TRUE),
+    .groups = "drop")
+
+min_goose_date <- goose_monthly$date[1]
+max_goose_date <- goose_monthly$date[nrow(goose_monthly)]
+
+
+goose_monthly <- goose_monthly %>% 
+  complete(date = seq(min_goose_date,
+                                 max_goose_date,
+                                 by = "1 month")) %>% 
+  mutate(mean_obs = ifelse(is.na(mean_obs) , 0, mean_obs))
+
+
+
+### Checking to see what the data looks like: 
+
+ggplot(goose_monthly, aes(x = date, y = mean_obs)) +
+  geom_line() +
+  labs(
+    title = "Canada Goose Monthly Obs",
+    x = "Date",
+    y = "Total Observations"
+  )
+
+
+
+################################################################################
+#write_csv(goose_monthly, "./Data/Cleaned_bySpecies/CanGoose_Monthly.csv")
+
+
+```
+
+
+
+### creating the hummingbird dataframe: 
+
+```{r}
+
+## creating the hummingbird dataframe: 
+humming_monthly <- hummingbird_data %>%
+  mutate(
+    date = floor_date(OBSERVATION.DATE, unit = "month")) %>%
+  group_by(date) %>%
+  summarise(
+    mean_obs = mean(sum_obs, na.rm = TRUE),
+    .groups = "drop")
+
+min_humm_date <- humming_monthly$date[1]
+max_humm_date <- humming_monthly$date[nrow(humming_monthly)]
+
+
+humming_monthly <- humming_monthly %>% 
+  complete(date = seq(min_humm_date,
+                                 max_humm_date,
+                                 by = "1 month")) %>% 
+  mutate(mean_obs = ifelse(is.na(mean_obs) , 0, mean_obs))
+
+
+
+### Checking to see what the data looks like: 
+
+ggplot(humming_monthly, aes(x = date, y = mean_obs)) +
+  geom_line() +
+  labs(
+    title = "Hummingbird Monthly Obs",
+    x = "Date",
+    y = "Total Observations"
+  )
+
+
+################################################################################
+#write_csv(humming_monthly, "./Data/Cleaned_bySpecies/Hummingbird_Monthly.csv")
+
+
+## creating the ts object
+
+hummingbird_ts <- ts(humming_monthly$mean_obs, start = c(2000, 4), frequency = 12)
+
+autoplot(hummingbird_ts)
+
+```
+
+
+```{r}
+## creating the hummingbird dataframe: 
+humming_monthly <- hummingbird_data %>%
+  mutate(
+    date = floor_date(OBSERVATION.DATE, unit = "month")) %>%
+  group_by(date) %>%
+  summarise(
+    mean_obs = mean(sum_obs, na.rm = TRUE),
+    .groups = "drop")
+
+min_humm_date <- humming_monthly$date[1]
+max_humm_date <- humming_monthly$date[nrow(humming_monthly)]
+
+
+humming_monthly <- humming_monthly %>% 
+  complete(date = seq(min_humm_date,
+                                 max_humm_date,
+                                 by = "1 month")) %>% 
+  mutate(mean_obs = ifelse(is.na(mean_obs) , 0, mean_obs))
+
+
+
+### Checking to see what the data looks like: 
+
+ggplot(humming_monthly, aes(x = date, y = mean_obs)) +
+  geom_line() +
+  labs(
+    title = "Hummingbird Monthly Obs",
+    x = "Date",
+    y = "Total Observations"
+  )
+
+
+################################################################################
+#write_csv(humming_monthly, "./Data/Cleaned_bySpecies/Hummingbird_Monthly.csv")
+
+
+## creating the ts object
+
+hummingbird_ts <- ts(humming_monthly$mean_obs, start = c(2000, 4), frequency = 12)
+
+autoplot(hummingbird_ts)
+```
+
+
+
+
+## Creating daily data
+
+```{r}
+
+min_warb_date <- warbler_data$OBSERVATION.DATE[1]
+max_warb_date <- warbler_data$OBSERVATION.DATE[nrow(warbler_data)]
+
+warbler_daily <- warbler_data %>%
+  complete(OBSERVATION.DATE = seq(min_warb_date,
+                                 max_warb_date,
+                                 by = "1 day")) %>% 
+  mutate(sum_obs = ifelse(is.na(sum_obs) , 0, sum_obs)) %>% 
+  rename(date = OBSERVATION.DATE)
+
+
+ggplot(warbler_daily, aes(x = date, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Warbler Daily Obs",
+    x = "Date",
+    y = "Total Observations"
+  )
+
+
+#write_csv(warbler_daily, "./Data/Cleaned_bySpecies/Warbler_Daily.csv")
+
+```
+
+
+```{r}
+min_humm_date <- hummingbird_data$OBSERVATION.DATE[1]
+max_humm_date <- hummingbird_data$OBSERVATION.DATE[nrow(hummingbird_data)]
+
+humm_daily <- hummingbird_data %>%
+  complete(OBSERVATION.DATE = seq(min_humm_date,
+                                 max_humm_date,
+                                 by = "1 day")) %>% 
+  mutate(sum_obs = ifelse(is.na(sum_obs) , 0, sum_obs)) %>% 
+  rename(date = OBSERVATION.DATE)
+
+
+ggplot(humm_daily, aes(x = date, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Hummingbird Daily Obs",
+    x = "Date",
+    y = "Total Observations"
+  )
+
+
+#write_csv(humm_daily, "./Data/Cleaned_bySpecies/Hummingbird_Daily.csv")
+
+
+```
+```{r}
+
+min_goose_date <- canada_goose_data$OBSERVATION.DATE[1]
+max_goose_date <- canada_goose_data$OBSERVATION.DATE[nrow(canada_goose_data)]
+
+goose_daily <- canada_goose_data %>%
+  complete(OBSERVATION.DATE = seq(min_goose_date,
+                                 max_goose_date,
+                                 by = "1 day")) %>% 
+  mutate(sum_obs = ifelse(is.na(sum_obs) , 0, sum_obs)) %>% 
+  rename(date = OBSERVATION.DATE)
+
+
+ggplot(goose_daily, aes(x = date, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Canada Goose Daily Obs",
+    x = "Date",
+    y = "Total Observations"
+  )
+
+
+#write_csv(goose_daily, "./Data/Cleaned_bySpecies/CanGoose_Daily.csv")
+
+```
+
