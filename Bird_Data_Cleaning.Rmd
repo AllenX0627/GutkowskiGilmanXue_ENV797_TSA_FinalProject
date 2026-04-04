@@ -80,7 +80,7 @@ canada_goose_data <- bird_data %>%
   summarise(sum_obs = sum(OBSERVATION.COUNT),
             sum_observers = n_distinct(OBSERVER.ID))
   
-ggplot(warbler_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+ggplot(canada_goose_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
   geom_line() +
   labs(
     title = "Canada Goose Observations Over Time",
