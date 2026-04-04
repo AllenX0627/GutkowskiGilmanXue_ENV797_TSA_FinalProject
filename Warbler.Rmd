@@ -1,0 +1,29 @@
+# YRWA Time Series Modeling & Forecasting
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(forecast)
+library(Kendall)
+library(tseries)
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(cowplot)
+library(lubridate)
+library(ggplot2)
+library(smooth)
+library(zoo)
+library(kableExtra)
+library(tidyr)
+
+```
+
+```{r}
+
+```
+
