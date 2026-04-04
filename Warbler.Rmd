@@ -136,4 +136,4 @@ print(model_compare)
 ```{r}
 checkresiduals(fit_312)
 ```
-
+> Convert to weekly data?
