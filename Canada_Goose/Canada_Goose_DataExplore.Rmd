@@ -1,0 +1,50 @@
+---
+title: "Canada_Goose_DataExplore"
+output: html_document
+date: "2026-04-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(forecast)
+library(Kendall)
+library(tseries)
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(cowplot)
+library(lubridate)
+library(ggplot2)
+library(smooth)
+library(zoo)
+library(kableExtra)
+library(tidyr)
+
+
+```
+
+
+## Summary Statistics
+
+```{r}
+
+goose_monthly <- read_csv("./Data/Cleaned_bySpecies/CanGoose_Monthly_withObserver")
+
+```
+
+```{r}
+
+
+ggplot(canada_goose_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Canada Goose Observations Over Time",
+    x = "Date",
+    y = "Total Observations"
+  )
+```
+
