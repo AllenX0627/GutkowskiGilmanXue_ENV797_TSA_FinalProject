@@ -28,23 +28,137 @@ library(tidyr)
 ```
 
 
-## Summary Statistics
+## Reading the data
+
 
 ```{r}
 
-goose_monthly <- read_csv("./Data/Cleaned_bySpecies/CanGoose_Monthly_withObserver")
+goose_monthly <- read_csv("./Data/Cleaned_bySpecies/CanGoose_Monthly_withObserver.csv")
+goose_daily <- read_csv("./Data/Cleaned_bySpecies/CanGoose_Daily_withObserver.csv")
+
+#creating the month column/ filtering dates for 10 years
+goose_monthly <- goose_monthly %>% 
+  mutate(month = month(ymd(date))) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-01-01"))
+
+goose_daily <- goose_daily %>% 
+  mutate(month = month(ymd(date))) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-01-01"))
+
 
 ```
 
+## Plotting the data
+
+
 ```{r}
 
-
-ggplot(canada_goose_data, aes(x = OBSERVATION.DATE, y = sum_obs)) +
+# Montly Plots
+ggplot(goose_monthly, aes(x = date, y = mean_obs)) +
   geom_line() +
   labs(
     title = "Canada Goose Observations Over Time",
     x = "Date",
-    y = "Total Observations"
-  )
+    y = "Mean Observations"
+  )+
+  theme_bw()
+
+ggplot(goose_monthly, aes(x = date, y = mean_observers)) +
+  geom_line() +
+  labs(
+    title = "Canada Goose Observers Over Time",
+    x = "Date",
+    y = "Mean Observers"
+  )+
+  theme_bw()
+
+
+### Daily Plots
+
+ggplot(goose_daily, aes(x = date, y = sum_obs)) +
+  geom_line() +
+  labs(
+    title = "Canada Goose Observations Over Time",
+    x = "Date",
+    y = "Mean Observations"
+  )+
+  theme_bw()
+
+ggplot(goose_daily, aes(x = date, y = sum_observers)) +
+  geom_line() +
+  labs(
+    title = "Canada Goose Observers Over Time",
+    x = "Date",
+    y = "Mean Observers"
+  )+
+  theme_bw()
+
 ```
+
+## Summary Statistics
+
+
+```{r}
+
+ggplot(goose_monthly, aes(x = as.factor(month), y = mean_obs))+
+  geom_boxplot()
+
+
+ggplot(goose_monthly, aes(x = as.factor(month), y = mean_observers))+
+  geom_boxplot()
+
+
+```
+
+## ACF and PACF
+
+```{r}
+
+
+ts_goose_monthly <- ts(goose_monthly$mean_obs, start = c(2015, 1), frequency = 12)
+
+autoplot(ts_goose_monthly)
+
+ts_goose_cleaned <- tsclean(ts_goose_monthly)
+
+autoplot(ts_goose_monthly, series = "Original Data")+
+  autolayer(ts_goose_cleaned, series = "Cleaned Data")+
+  xlab("Time")+
+  ylab("Monthly Average Observations (Birds)")
+
+```
+```{r}
+ts_goose_cleaned %>% stl(s.window = 12) %>%
+  autoplot()
+
+```
+```{r}
+
+Acf(ts_goose_cleaned, lag.max = 40)
+Pacf(ts_goose_cleaned, lag.max = 40)
+
+```
+
+
+
+
+
+
+```{r}
+
+auto_model <- auto.arima(ts_goose_cleaned)
+auto_model
+
+
+fit_212 <- auto.arima(
+  ts_goose_cleaned,
+  seasonal = FALSE,
+  xreg = fourier(ts_goose_cleaned, K = c(2, 12))
+)
+
+```
+
+
 
