@@ -8,7 +8,7 @@ date: "2026-04-04"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r, include=FALSE}
 
 library(forecast)
 library(Kendall)
@@ -23,6 +23,7 @@ library(smooth)
 library(zoo)
 library(kableExtra)
 library(tidyr)
+library(RColorBrewer)
 
 
 ```
@@ -102,8 +103,33 @@ ggplot(goose_daily, aes(x = date, y = sum_observers)) +
 
 ```{r}
 
-ggplot(goose_monthly, aes(x = as.factor(month), y = mean_obs))+
-  geom_boxplot()
+month_colors <- c(
+  "1" = "#4575b4",  # Jan - cold blue
+  "2" = "#74add1",
+  "3" = "#abd9e9",
+  "4" = "#e0f3f8",
+  "5" = "#fee090",
+  "6" = "#fdae61",
+  "7" = "#f46d43",
+  "8" = "#f46d43",  # peak summer - hot red
+  "9" = "#fdae61",
+  "10" = "#fee090",
+  "11" = "#abd9e9",
+  "12" = "#4575b4"  # Dec - cold again
+)
+
+goose_monthly$month <- factor(goose_monthly$month, levels = 1:12)
+
+ggplot(goose_monthly, aes(x = month, y = mean_obs, fill = month))+
+  geom_boxplot()+
+  ylim(0, 200)+
+  theme_bw(base_size= 13)+
+  scale_fill_manual(values = month_colors)+
+  ggtitle("Monthly Canada Goose Observations in Durham (2015-2025)")+
+  ylab("Average Observations (Birds)")+
+  xlab("Month")+
+  theme(legend.position = "none")+ 
+  scale_x_discrete(labels = month.abb)
 
 
 ggplot(goose_monthly, aes(x = as.factor(month), y = mean_observers))+
@@ -112,53 +138,437 @@ ggplot(goose_monthly, aes(x = as.factor(month), y = mean_observers))+
 
 ```
 
-## ACF and PACF
+## outlier Removal
 
 ```{r}
 
 
 ts_goose_monthly <- ts(goose_monthly$mean_obs, start = c(2015, 1), frequency = 12)
 
-autoplot(ts_goose_monthly)
+autoplot(ts_goose_monthly)+
+  xlab("Time")+
+  ylab("Average Observations (Birds)")+
+  ggtitle("Monthly Canada Goose Data")+
+  theme_bw(base_size= 13)+
+  xlim(2015, 2025)+
+  scale_x_continuous(breaks = seq(2015, 2025, by = 1))
 
 ts_goose_cleaned <- tsclean(ts_goose_monthly)
 
-autoplot(ts_goose_monthly, series = "Original Data")+
-  autolayer(ts_goose_cleaned, series = "Cleaned Data")+
-  xlab("Time")+
-  ylab("Monthly Average Observations (Birds)")
+
+autoplot(ts_goose_monthly, series = "Original Data") +
+  autolayer(ts_goose_cleaned, series = "Cleaned Data") +
+  xlab("Time") +
+  ylab("Average Observations (Birds)") +
+  ggtitle("Outlier Removal: Monthly Canada Goose Data") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),  
+    legend.justification = c(0, 1),    
+    legend.title = element_blank())
 
 ```
+
+
+
+## decomposing the series
+
+
 ```{r}
 ts_goose_cleaned %>% stl(s.window = 12) %>%
   autoplot()
 
+
+ts_goose_decomp = decompose(ts_goose_cleaned, type = "additive")
+
+autoplot(ts_goose_decomp)+
+  ggtitle("Decomposition of Cleaned Canada Goose Data")+
+  theme_bw(base_size= 13)
+
+##############################################################################
+# differenced tseries
+ts_goose_diff <- diff(ts_goose_cleaned, lag = 1)
+
+ts_goose_diff_decomp = decompose(ts_goose_diff, type = "additive")
+
+autoplot(ts_goose_diff_decomp)+
+  ggtitle("Decomposition of Differenced Canada Goose Data")+
+  theme_bw(base_size= 13)
+
 ```
+
+## Creating Test / Train Datasets
+
+Testing data had to be moved due to 
+
 ```{r}
 
-Acf(ts_goose_cleaned, lag.max = 40)
-Pacf(ts_goose_cleaned, lag.max = 40)
+goose_train <- ts_goose_cleaned[1:109]
+ts_goose_train <- ts(goose_train, start = c(2015, 1), frequency = 12)
+
+goose_test <- ts_goose_cleaned[110:121]
+ts_goose_test <- ts(goose_test, start = c(2024, 2), frequency = 12)
+
+
+autoplot(ts_goose_cleaned, series = "Cleaned Data")+
+  autolayer(ts_goose_test, series = "Testing Data")+
+  autolayer(ts_goose_train, series = "Training Data")+
+  xlim(2023, 2026)
 
 ```
 
 
 
-
-
+## ACF and PACF
 
 ```{r}
 
-auto_model <- auto.arima(ts_goose_cleaned)
-auto_model
+a <- autoplot(Acf(ts_goose_cleaned, lag.max = 50))+
+  ggtitle(" ")+
+  theme_bw(base_size= 13)
+b <- autoplot(Pacf(ts_goose_cleaned, lag.max = 50))+
+  ggtitle(" ")+
+  theme_bw(base_size= 13)
 
+plot_row <- plot_grid(a, b, ncol = 2)
 
-fit_212 <- auto.arima(
-  ts_goose_cleaned,
-  seasonal = FALSE,
-  xreg = fourier(ts_goose_cleaned, K = c(2, 12))
+# now add the title
+title <- ggdraw() + 
+  draw_label(
+    "Cleaned Canada Goose Data: ACF and PACF",
+    x = 0,
+    hjust = 0,
+    vjust = 1
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 0)
+  )
+plot_grid(
+  title, plot_row,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.09, 1)
 )
 
+
+
 ```
 
 
+
+```{r}
+
+adf.test(ts_goose_cleaned)
+nsdiffs(ts_goose_cleaned)
+ndiffs(ts_goose_cleaned)
+
+```
+
+
+## Fitting Sarima Models
+
+```{r}
+
+
+###########################################################################
+# Fit based on my prediction: 
+#(1,1,1)(1,0,1)
+
+sarima111_101_fit <- Arima(ts_goose_train, order = c(1,1,1), seasonal = c(1,0,1))
+sarima111_101_for <- forecast(sarima111_101_fit, h = 12)
+
+########## comparing AIC and checking residuals
+checkresiduals(sarima111_101_fit)
+
+compare_aic <- data.frame(sarima111_101_fit$aic) 
+
+
+###########################################################################
+# Fit #2 testing values around prediction: 
+#(1,1,0)(1,0,1)
+
+sarima110_101_fit <- Arima(ts_goose_train, order = c(1,1,0), seasonal = c(1,0,1))
+sarima110_101_for <- forecast(sarima110_101_fit, h = 12)
+
+
+########## comparing AIC and checking residuals
+checkresiduals(sarima110_101_fit)
+
+compare_aic <- data.frame(compare_aic, sarima110_101_fit$aic) 
+
+
+###########################################################################
+# Fit #3 testing values around prediction: 
+#(1,1,0)(1,0,0)
+
+sarima110_100_fit <- Arima(ts_goose_train, order = c(1,1,0), seasonal = c(1,0,0))
+sarima110_100_for <- forecast(sarima110_101_fit, h = 12)
+
+########## comparing AIC and checking residuals
+checkresiduals(sarima110_100_fit)
+
+compare_aic <- data.frame(compare_aic, sarima110_100_fit$aic) 
+
+
+###########################################################################
+# Auto Fit based on training data: 
+#(1,1,1)(1,0,0)
+
+auto_sarima111_100_fit <- auto.arima(ts_goose_train)
+auto_sarima111_100_for <- forecast(auto_sarima111_100_fit, h = 12)
+
+########## comparing AIC and checking residuals
+checkresiduals(auto_sarima111_100_fit)
+
+compare_aic <- data.frame(compare_aic, auto_sarima111_100_fit$aic) 
+
+
+############################################################################
+#comparing AIC and
+
+print(compare_aic)
+
+#
+
+```
+
+#forecasting SARIMA models
+
+```{r}
+
+
+###########################################################################
+# Fit based on my prediction: 
+#(1,1,1)(1,0,1)
+
+#Plot foresting results
+autoplot(sarima111_101_for)+
+  autolayer(ts_goose_test)+
+  ylab("Observations")
+
+
+#Plot model + observed data
+autoplot(ts_goose_test) +
+  autolayer(sarima111_101_for, series="SARIMA",PI=FALSE) +
+  ylab("Observations")
+
+sarima111_101_scores <- accuracy(sarima111_101_for$mean,goose_test)
+sarima111_101_scores
+
+
+###########################################################################
+# Fit #2 testing values around prediction: 
+#(1,1,0)(1,0,1)
+
+#Plot foresting results
+autoplot(sarima110_101_for)+
+  autolayer(ts_goose_test)+
+  ylab("Observations")
+
+
+#Plot model + observed data
+autoplot(ts_goose_test) +
+  autolayer(sarima110_101_for, series="SARIMA",PI=FALSE) +
+  ylab("Observations")
+
+sarima110_101_scores <- accuracy(sarima110_101_for$mean,goose_test)
+sarima110_101_scores
+
+###########################################################################
+# Fit #3 testing values around prediction: 
+#(1,1,0)(1,0,0)
+
+#Plot foresting results
+autoplot(sarima110_100_for)+
+  autolayer(ts_goose_test)+
+  ylab("Observations")
+
+
+#Plot model + observed data
+autoplot(ts_goose_test) +
+  autolayer(sarima110_100_for, series="SARIMA",PI=FALSE) +
+  ylab("Observations")
+
+sarima110_100_scores <- accuracy(sarima110_100_for$mean,goose_test)
+sarima110_100_scores
+
+
+###########################################################################
+# Auto Fit based on training data: 
+#(1,1,1)(1,0,0)
+
+#Plot foresting results
+autoplot(auto_sarima111_100_for)+
+  autolayer(ts_goose_test)+
+  ylab("Observations")
+
+
+#Plot model + observed data
+autoplot(ts_goose_test) +
+  autolayer(auto_sarima111_100_for, series="SARIMA",PI=FALSE) +
+  ylab("Observations")
+
+sarima111_100_scores <- accuracy(auto_sarima111_100_for$mean,goose_test)
+sarima111_100_scores
+
+
+#############################################################################
+#plotting tests
+autoplot(ts_goose_test)+
+  autolayer(sarima111_101_for,PI=FALSE, series = "my pred")+
+  autolayer(auto_sarima111_100_for,PI=FALSE, series= "auto_train")+
+  autolayer(sarima110_101_for, PI=FALSE, series = "pred 2")
+  
+#############################################################################
+#comparing metrics
+#create data frame
+seas_scores <- as.data.frame(rbind(sarima111_101_scores, sarima111_100_scores, sarima110_101_scores))
+row.names(seas_scores) <- c("my_pred", "auto train", "pred2")
+
+#choose model with lowest RMSE
+best_model_index <- which.min(seas_scores[,"RMSE"])
+cat("The best model by RMSE is:", row.names(seas_scores[best_model_index,]))
+
+
+```
+
+
+## strucTS
+
+```{r}
+
+
+structs_nafix <- StructTS(ts_goose_train, type = "BSM",
+                         fixed=c(NA,NA,NA,NA))
+#Variances:
+#  level    slope   seas     epsilon  
+# 431.92     0.00    11.17   117.16
+
+
+#this function has convergence issues
+checkresiduals(structs_nafix)
+
+#Generating forecasts
+# StructTS() does not call the forecast() internally so we need one more step
+auto_ss_for <- forecast(structs_nafix,h=12)
+plot(auto_ss_for)
+
+SS_for1_score <- accuracy(auto_ss_for$mean,goose_test)
+SS_for1_score
+
+
+############################################################################
+
+structs_model2 <- StructTS(ts_goose_train, type = "BSM",
+                         fixed=c(200, 10, NA, 120))
+
+#this function has convergence issues
+checkresiduals(structs_model2)
+
+#Generating forecasts
+# StructTS() does not call the forecast() internally so we need one more step
+SS_for2 <- forecast(structs_model2,h=12)
+autoplot(SS_for2)
+
+#Generating forecasts
+# StructTS() does not call the forecast() internally so we need one more step
+SS_for2 <- forecast(structs_model2,h=12)
+plot(SS_for2)
+
+SS_for2_score <- accuracy(SS_for2$mean,goose_test)
+SS_for2_score
+
+
+
+############################################################################
+#plotting tests
+autoplot(ts_goose_test)+
+  autolayer(auto_sarima111_100_for,PI=FALSE, series = "sarima")+
+  autolayer(auto_ss_for,PI=FALSE, series= "struct")
+
+
+
+#############################################################################
+#comparing metrics
+#create data frame
+struct_scores <- as.data.frame(rbind(SS_for1_score, sarima111_100_scores))
+row.names(struct_scores) <- c("auto_train_struct", "auto_sarima")
+
+#choose model with lowest RMSE
+best_model_index <- which.min(struct_scores[,"RMSE"])
+cat("The best model by RMSE is:", row.names(struct_scores[best_model_index,])) 
+
+
+```
+## Comparison of Metrics
+
+```{r}
+
+#comparing metrics
+#create data frame
+scores <- as.data.frame(rbind(SS_for1_score, sarima111_100_scores))
+row.names(scores) <- c("Auto-BSM", "Auto-SARIMA")
+
+#choose model with lowest RMSE
+best_model_index <- which.min(scores[,"RMSE"])
+cat("The best model by RMSE is:", row.names(scores[best_model_index,])) 
+
+
+kbl(scores, 
+      caption = "Forecasts for Monthly Canada Goose Observations",
+      digits = array(2,ncol(scores))) %>%
+  kable_styling(full_width = FALSE, position = "center", latex_options = "hold_position") %>%
+  kable_styling(latex_options="striped", stripe_index = which.min(scores[,"RMSE"]))
+
+
+
+
+```
+
+
+
+
+```{r}
+#### Testing Plot
+autoplot(ts_goose_test, series = "True Observations")+
+  autolayer(auto_sarima111_100_for,PI=FALSE, series = "Auto-SARIMA")+
+  autolayer(auto_ss_for,PI=FALSE, series= "Auto-BSM")+
+  theme_bw(base_size= 13)+
+  xlim(2024, 2025)+
+  scale_x_continuous(breaks = seq(2024, 2025, by = 1))+
+  xlab("Test Period (2024)")+
+  ylab("Average Observations (Birds)")+
+  ggtitle("Comparison Average Monthly Observation Forecasts")
+
+
+autoplot(auto_sarima111_100_for, series = "Auto-SARIMA")+
+  autolayer(ts_goose_test, series = "True Observations")+
+  theme_bw(base_size= 13)+
+  xlim(2015, 2025)+
+  scale_x_continuous(breaks = seq(2015, 2025, by = 5))+
+  xlab("Time")+
+  ylab("Average Observations (Birds)")+
+  ggtitle("Auto-SARIMA Forecast") +
+  theme(
+    legend.position = c(0.02, 0.98),  
+    legend.justification = c(0, 1),    
+    legend.title = element_blank())
+
+autoplot(auto_ss_for, series = "Auto-BSM")+
+  autolayer(ts_goose_test, series = "True Observations")+
+  theme_bw(base_size= 13)+
+  xlim(2015, 2025)+
+  scale_x_continuous(breaks = seq(2015, 2025, by = 5))+
+  xlab("Time")+
+  ylab("Average Observations (Birds)")+
+  ggtitle("Auto-BSM Forecast") +
+  theme(
+    legend.position = c(0.02, 0.98),  
+    legend.justification = c(0, 1),    
+    legend.title = element_blank())
+
+
+```
 
