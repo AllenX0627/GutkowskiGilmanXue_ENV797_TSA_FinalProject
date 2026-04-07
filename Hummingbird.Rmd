@@ -1,0 +1,340 @@
+---
+title: "Ruby-throated Hummingbird Time Series Analysis"
+author: "Jonathan Gilman"
+date: "2026-04-06"
+output:
+  pdf_document:
+    toc: true
+geometry: margin=2.54cm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r packages, message=FALSE, warning=FALSE}
+library(lubridate)
+library(ggplot2)
+library(forecast)
+library(Kendall)
+library(tseries)
+library(tidyverse)
+library(cowplot)
+library(kableExtra)
+```
+
+## Introduction, Motivation, Relevance, and Objectives
+
+Write a few paragraphs detailing the rationale for your study...
+
+## Dataset Information
+
+Provide information on how the dataset for this analysis were collected...
+
+```{r}
+#read data
+humm_monthly <- read.csv("./Data/Cleaned_bySpecies/Hummingbird_Monthly.csv")
+
+#inspect data
+head(humm_monthly)
+nobs <- nrow(humm_monthly)
+
+#format date column
+humm_monthly <- humm_monthly %>%
+  mutate(date = as.Date(date))
+```
+
+```{r}
+#keep last 12 months for forecast accuracy checking
+n_for <- 12
+
+#filter training data: 2015-2024
+humm_train <- humm_monthly %>%
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2024-12-01"))
+
+#filter test data: 2025
+humm_test <- humm_monthly %>%
+  filter(date >= as.Date("2025-01-01") &
+         date <= as.Date("2025-12-01"))
+```
+
+
+```{r}
+kbl(head(humm_train[, c("date","mean_obs")], 10),
+    caption = "Monthly Ruby-throated Hummingbird observation data, 2015-2024.",
+    col.names = c("Date", "Mean Daily Observations"),
+    digits = 2) %>%
+  kable_styling(full_width = FALSE, position = "center",
+                latex_options = "hold_position")
+```
+
+## Analysis
+
+### Transforming data into time series object
+
+```{r}
+#create training ts object
+ts_humm_train <- ts(humm_train$mean_obs,
+                    start = c(2015, 1),
+                    frequency = 12)
+
+#store test observations for accuracy()
+humm_test_obs <- humm_test$mean_obs
+```
+
+### Initial Plots
+
+```{r}
+autoplot(ts_humm_train) +
+  xlab("Time") +
+  ylab("Mean Daily Observations") +
+  ggtitle("Ruby-throated Hummingbird Observations (2015-2024)") +
+  theme_bw(base_size = 13) +
+  scale_x_continuous(breaks = seq(2015, 2025, by = 1))
+```
+
+```{r}
+humm_train <- humm_train %>%
+  mutate(month = factor(month(date), levels = 1:12))
+
+ggplot(humm_train, aes(x = month, y = mean_obs)) +
+  geom_boxplot(fill = "steelblue", alpha = 0.6) +
+  xlab("Month") +
+  ylab("Mean Daily Observations") +
+  ggtitle("Monthly Hummingbird Observations by Month (2015-2024)") +
+  scale_x_discrete(labels = month.abb) +
+  theme_bw(base_size = 13)
+```
+
+```{r}
+#ACF and PACF of original training series
+par(mfrow = c(1,2))
+Acf(ts_humm_train, lag.max = 40, main = "Hummingbird ACF and PACF")
+Pacf(ts_humm_train, lag.max = 40, main = "")
+par(mfrow = c(1,1))
+```
+
+### Decomposing the time series
+
+```{r}
+humm_decomp <- decompose(ts_humm_train, type = "additive")
+autoplot(humm_decomp) +
+  ggtitle("Decomposition of Monthly Hummingbird Observations") +
+  theme_bw(base_size = 13)
+```
+
+```{r}
+#remove seasonal component
+humm_deseasonal <- seasadj(humm_decomp)
+
+#plot original vs deseasoned
+autoplot(ts_humm_train, series = "Original") +
+  autolayer(humm_deseasonal, series = "Deseasoned") +
+  xlab("Time") +
+  ylab("Mean Daily Observations") +
+  ggtitle("Original and Deseasoned Hummingbird Data") +
+  theme_bw(base_size = 13) +
+  theme(legend.title = element_blank(),
+        legend.position = c(0.15, 0.88))
+```
+
+```{r}
+#compare ACFs: original vs deseasoned
+plot_grid(
+  autoplot(Acf(ts_humm_train, lag.max = 40, plot = FALSE),
+           main = "ACF: Original") +
+    theme_bw(base_size = 11),
+  autoplot(Acf(humm_deseasonal, lag.max = 40, plot = FALSE),
+           main = "ACF: Deseasoned") +
+    theme_bw(base_size = 11),
+  nrow = 1
+)
+```
+
+```{r}
+#compare PACFs: original vs deseasoned
+plot_grid(
+  autoplot(Pacf(ts_humm_train, lag.max = 40, plot = FALSE),
+           main = "PACF: Original") +
+    theme_bw(base_size = 11),
+  autoplot(Pacf(humm_deseasonal, lag.max = 40, plot = FALSE),
+           main = "PACF: Deseasoned") +
+    theme_bw(base_size = 11),
+  nrow = 1
+)
+```
+
+### Stationarity Test
+
+```{r}
+#run ADF on deseasoned series
+print(adf.test(humm_deseasonal, alternative = "stationary"))
+
+#how many differences needed
+n_diff  <- ndiffs(humm_deseasonal)
+ns_diff <- nsdiffs(ts_humm_train)
+
+cat("Non-seasonal differences needed:", n_diff, "\n")
+cat("Seasonal differences needed:", ns_diff, "\n")
+```
+
+```{r}
+#difference the deseasoned series
+humm_deseasonal_diff <- diff(humm_deseasonal, differences = 1, lag = 1)
+
+#plot original, deseasoned, and differenced
+autoplot(ts_humm_train, series = "Original") +
+  autolayer(humm_deseasonal, series = "Deseasoned") +
+  autolayer(humm_deseasonal_diff, series = "Deseasoned + Diff") +
+  xlab("Time") +
+  ylab("Mean Daily Observations") +
+  ggtitle("Original, Deseasoned, and Differenced Hummingbird Data") +
+  theme_bw(base_size = 13) +
+  theme(legend.title = element_blank(),
+        legend.position = c(0.15, 0.88))
+```
+
+```{r}
+#compare ACFs after differencing
+plot_grid(
+  autoplot(Acf(ts_humm_train, lag.max = 40, plot = FALSE),
+           main = "ACF: Original") +
+    theme_bw(base_size = 11),
+  autoplot(Acf(humm_deseasonal, lag.max = 40, plot = FALSE),
+           main = "ACF: Deseasoned") +
+    theme_bw(base_size = 11),
+  autoplot(Acf(humm_deseasonal_diff, lag.max = 40, plot = FALSE),
+           main = "ACF: Deseasoned + Diff") +
+    theme_bw(base_size = 11),
+  nrow = 1
+)
+```
+
+```{r}
+#compare PACFs after differencing
+plot_grid(
+  autoplot(Pacf(ts_humm_train, lag.max = 40, plot = FALSE),
+           main = "PACF: Original") +
+    theme_bw(base_size = 11),
+  autoplot(Pacf(humm_deseasonal, lag.max = 40, plot = FALSE),
+           main = "PACF: Deseasoned") +
+    theme_bw(base_size = 11),
+  autoplot(Pacf(humm_deseasonal_diff, lag.max = 40, plot = FALSE),
+           main = "PACF: Deseasoned + Diff") +
+    theme_bw(base_size = 11),
+  nrow = 1
+)
+```
+
+### Fitting Models
+
+#### Model 1: SARIMA (manual)
+
+```{r}
+##fit candidate SARIMA models and compare AIC
+#orders informed by ACF/PACF of differenced deseasoned series
+
+sarima_fit1 <- Arima(ts_humm_train, order = c(1,1,1), seasonal = c(1,1,0))
+sarima_fit2 <- Arima(ts_humm_train, order = c(0,1,1), seasonal = c(0,1,1))
+sarima_fit3 <- Arima(ts_humm_train, order = c(1,1,0), seasonal = c(0,1,1))
+sarima_fit4 <- Arima(ts_humm_train, order = c(1,1,1), seasonal = c(1,0,0))
+
+compare_aic <- data.frame(
+  Model = c("SARIMA(1,1,1)(1,1,0)[12]",
+            "SARIMA(0,1,1)(0,1,1)[12]",
+            "SARIMA(1,1,0)(0,1,1)[12]",
+            "SARIMA(1,1,1)(1,0,0)[12]"),
+  AIC = c(sarima_fit1$aic,
+          sarima_fit2$aic,
+          sarima_fit3$aic,
+          sarima_fit4$aic)
+)
+print(compare_aic)
+```
+
+```{r}
+#check residuals for best manual model by AIC
+best_manual_idx <- which.min(compare_aic$AIC)
+sarima_manual_best <- list(sarima_fit1, sarima_fit2, sarima_fit3, sarima_fit4)[[best_manual_idx]]
+cat("Best manual model:", compare_aic$Model[best_manual_idx], "\n")
+checkresiduals(sarima_manual_best)
+```
+
+
+
+#### Model 2: Auto SARIMA
+
+```{r}
+#auto ARIMA on training series
+sarima_auto_fit <- auto.arima(ts_humm_train)
+print(sarima_auto_fit)
+checkresiduals(sarima_auto_fit)
+```
+
+#### Model 3: Seasonal Naive
+
+```{r}
+#seasonal naive as benchmark
+snaive_fit <- snaive(ts_humm_train, h = n_for)
+checkresiduals(snaive_fit)
+```
+
+### Forecasting
+
+```{r}
+#generate 12-step-ahead forecasts
+sarima_manual_for <- forecast(sarima_manual_best, h = n_for)
+sarima_auto_for   <- forecast(sarima_auto_fit, h = n_for)
+
+```
+
+### Checking Accuracy
+
+```{r}
+#compute accuracy against test observations
+sarima_manual_scores <- accuracy(sarima_manual_for$mean, humm_test_obs)
+sarima_auto_scores   <- accuracy(sarima_auto_for$mean,   humm_test_obs)
+snaive_scores        <- accuracy(snaive_fit$mean,        humm_test_obs)
+
+#create comparison data frame
+seas_scores <- as.data.frame(rbind(sarima_manual_scores,
+                                    sarima_auto_scores,
+                                    snaive_scores))
+row.names(seas_scores) <- c(compare_aic$Model[best_manual_idx],
+                             "ARIMA(1,0,0)(1,1,2)[12]",
+                             "Seasonal Naive")
+
+#choose model with lowest RMSE
+best_model_index <- which.min(seas_scores[,"RMSE"])
+cat("The best model by RMSE is:", row.names(seas_scores[best_model_index,]))
+```
+
+```{r}
+kbl(seas_scores[, c("ME", "RMSE", "MAE")],
+    caption = "Forecast accuracy for monthly Ruby-throated Hummingbird observations",
+    digits = array(2, 3)) %>%
+  kable_styling(full_width = FALSE, position = "center",
+                latex_options = "hold_position") %>%
+  kable_styling(latex_options = "striped",
+                stripe_index = which.min(seas_scores[,"RMSE"]))
+```
+
+```{r}
+#plot all forecasts and observed values together
+ts_humm_test <- ts(humm_test_obs, start = c(2025, 1), frequency = 12)
+
+autoplot(ts_humm_test, series = "True Observations") +
+  autolayer(sarima_manual_for, PI = FALSE,
+            series = compare_aic$Model[best_manual_idx]) +
+  autolayer(sarima_auto_for, PI = FALSE,
+            series = "ARIMA(1,0,0)(1,1,2)[12]") +
+  autolayer(snaive_fit, PI = FALSE,
+            series = "Seasonal Naive") +
+  xlab("Time") +
+  ylab("Mean Daily Observations") +
+  ggtitle("Forecast Comparison: Test Period (2025)") +
+  theme_bw(base_size = 13) +
+  guides(colour = guide_legend(title = "Model"))
+```
+
