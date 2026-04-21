@@ -20,6 +20,7 @@ library(zoo)
 library(kableExtra)
 library(tidyr)
 library(RColorBrewer)
+library(knitr)
 
 
 ```
@@ -27,9 +28,12 @@ library(RColorBrewer)
 
 # Introduction, Motivation, Relevance, Objectives
 
-Anthropogenic changes have significantly affected bird diversity, making it important to quantify how bird populations have shifted over time at the species level. These impacts may not be uniform, as different residency groups (e.g., residents and migrants) can respond differently to environmental changes within the same region. In particular, different residency types may exhibit distinct seasonal patterns, highlighting the importance of using time series approaches to capture both long-term trends and seasonality. Therefore, examining variation across residency types can provide deeper insights into community dynamics and improve our understanding of how human activities shape bird populations.
+Anthropogenic environmental change has significantly altered bird diversity and population dynamics, with particularly strong declines observed among migratory species. Long-term studies estimate that North American bird populations have declined by nearly 60% since 1970, underscoring the importance of understanding species-specific trends over time.
 
-Therefore, this project focuses on Durham County as a case study to analyze and model long-term trends in bird occurrence across different residency groups using time series approaches. The three types of residency groups that we will be investigating in this study include resident, summer migrant, and winter migrant species, represented by the Canada Goose, Ruby-Throated Hummingbird, and the Yellow-Rumped Warbler, respectively. Indicator species were selected based on their residency pattern and abundance of data for Durham, NC. 
+These impacts are not uniform across species, as different residency groups (resident, summer migrant, winter migrant) respond differently to environmental pressures. Seasonal variation in occurrence may differ substantially between these groups, making time series approaches especially valuable for capturing both long-term trends and periodic fluctuations.
+
+This study uses Durham County, North Carolina as a case study to analyze long-term trends in bird occurrence across residency types using time series modeling. Three indicator species were selected to represent different residency strategies: Canada Goose (resident), Ruby-throated Hummingbird (summer migrant), and Yellow-rumped Warbler (winter migrant). These species were chosen based on their ecological relevance and the availability of consistent observational data.
+
 
 ^^took this from the abstract submission/ added a little bit about our species
 - maybe include a little bit more about background - in the slides we talked about the decline of migrant bird populations? (60% since 1900)
@@ -46,18 +50,16 @@ For the intial download of data from eBird, the data request was filtered to our
 
 # Data Cleaning (general)
 
-
+- chose to use between 2015 and 2015
 
 
 # Analysis (Methods and Models)
 
-
 ### Canada Goose + models / results
 
-- canada goose is the resident species
-- cleaned the data for monthly obs and for observer normalized monthly data
-- tell how many observations are in each dataset
-- summary statistics? 
+For the time series analysis of Canada Goose observation data, I chose to use the monthly data for training and forecasting models. Prior to any modeling, general data exploration and further cleaning were performed. 
+
+After intitial plotting of the time series, outlier removal was performed using tsclean() (Figure X).
 
 ```{r, include = FALSE, warning= FALSE}
 
@@ -69,16 +71,14 @@ goose_monthly <- goose_monthly %>%
          date <= as.Date("2025-01-01"))
 
 
-
 ```
 
-- plot the general time series
 
-```{r, echo = FALSE, warning = FALSE, message= FALSE}
+```{r, echo = FALSE, warning = FALSE, message= FALSE, fig.width=12, fig.height=5, fig.cap= "Initial time series plot and cleaning of the monthly Canada Goose Observations Data"}
 
 ts_goose_monthly <- ts(goose_monthly$mean_obs, start = c(2015, 1), frequency = 12)
 
-autoplot(ts_goose_monthly)+
+ts_plot_goose <- autoplot(ts_goose_monthly)+
   xlab("Time")+
   ylab("Average Observations (Birds)")+
   ggtitle("Monthly Canada Goose Data")+
@@ -95,7 +95,7 @@ goose_test <- ts_goose_cleaned[110:121]
 ts_goose_test <- ts(goose_test, start = c(2024, 2), frequency = 12)
 
 
-autoplot(ts_goose_monthly, series = "Original Data") +
+ts_goose_plot_cleaned <- autoplot(ts_goose_monthly, series = "Original Data") +
   autolayer(ts_goose_cleaned, series = "Cleaned Data") +
   xlab("Time") +
   ylab("Average Observations (Birds)") +
@@ -106,13 +106,47 @@ autoplot(ts_goose_monthly, series = "Original Data") +
     legend.justification = c(0, 1),    
     legend.title = element_blank())
 
+plot_grid(ts_plot_goose, ts_goose_plot_cleaned, ncol = 2)
 
 ```
 
+After removing outliers from the data, summary statistics were also assessed (Table X). The wide range in monthly observations and large standard deviation relative to the mean indicated that while a resident species, observations may vary over the course of the year. 
 
-- monthly obs distribution
 
-```{r, echo = FALSE, warning = FALSE,  fig.cap = "Distribution of Monthly Observations of Canada Geese"}
+
+```{r, echo=FALSE, warning=FALSE}
+
+goose_clean_df <- data.frame(
+  date = as.Date(time(ts_goose_cleaned)),
+  mean_obs = as.numeric(ts_goose_cleaned)
+)
+
+summary_table <- goose_clean_df %>%
+  summarise(
+    Mean = mean(mean_obs, na.rm = TRUE),
+    Median = median(mean_obs, na.rm = TRUE),
+    SD = sd(mean_obs, na.rm = TRUE),
+    Min = min(mean_obs, na.rm = TRUE),
+    Max = max(mean_obs, na.rm = TRUE),
+    `1st Quartile` = quantile(mean_obs, 0.25, na.rm = TRUE),
+    `3rd Quartile` = quantile(mean_obs, 0.75, na.rm = TRUE)
+  )
+
+kbl(summary_table,
+    caption = "Summary Statistics for Cleaned Monthly Goose Observations",
+    digits = 2,
+    booktabs = TRUE) %>%
+  kable_styling(
+    latex_options = c("hold_position"),
+    full_width = FALSE,
+    position = "center"
+  )
+```
+
+To begin investigating potential seasonality or variations in observations throughout the year, the distribution of monthly observations were plotted and the series was decomposed into seasonal, trend, and residual components (Figure X).
+
+
+```{r, echo = FALSE, warning = FALSE,  fig.height=4, fig.width=14, fig.cap = "Distribution of Monthly Observations of Canada Geese"}
 month_colors <- c(
   "1" = "#4575b4",  # Jan - cold blue
   "2" = "#74add1",
@@ -130,7 +164,7 @@ month_colors <- c(
 
 goose_monthly$month <- factor(goose_monthly$month, levels = 1:12)
 
-ggplot(goose_monthly, aes(x = month, y = mean_obs, fill = month))+
+goose_monthly_dist <- ggplot(goose_monthly, aes(x = month, y = mean_obs, fill = month))+
   geom_boxplot()+
   ylim(0, 200)+
   theme_bw(base_size= 13)+
@@ -141,29 +175,24 @@ ggplot(goose_monthly, aes(x = month, y = mean_obs, fill = month))+
   theme(legend.position = "none")+ 
   scale_x_discrete(labels = month.abb)
 
-
-
-``` 
-- canada goose has a slightly seasonal pattern, but consistent observations year round support the fact that certain canada goose species reside in Durham year round
-
-
-- next step --> decompose the data
-
-```{r, echo = FALSE, warning= FALSE}
-
 ts_goose_decomp = decompose(ts_goose_cleaned, type = "additive")
 
-autoplot(ts_goose_decomp)+
+goose_decomp_plot <- autoplot(ts_goose_decomp)+
   ggtitle("Decomposition of Cleaned Canada Goose Data")+
   theme_bw(base_size= 13)
 
+plot_grid(goose_monthly_dist, goose_decomp_plot, ncol = 2)
 
-```
+``` 
+From the plot of distributions of monthly observations, the Canada Goose appears to have a slight seasonal pattern. However, consistency in observations year-round support the Canada Goose's resident species status. 
 
--- ACF and PACF
-- information about those
+The decomposition of the cleaned series also shows a strong seasonal pattern and trend. However the trend does not appear to have a consistent pattern over the course of the time series.  
 
-```{r, echo = FALSE, warning= FALSE}
+#### ACF and PACF
+
+The ACF and PACF were then plotted and assessed for initial modeling considerations (Figure X).
+
+```{r, echo = FALSE, warning= FALSE, fig.cap= "ACF and PACF plots for the cleaned monthly Canada Goose time series"}
 a <- autoplot(Acf(ts_goose_cleaned, lag.max = 50, plot = FALSE))+
   ggtitle(" ")+
   theme_bw(base_size= 13)
@@ -196,14 +225,19 @@ plot_grid(
 
 ```
 
+The ACF plot for the series shows a strong seasonality at lag 12, suggesting that models will either need to account for seasonality, or seasonality should be removed prior to modeling. The gradual decacy of the series also suggests stationarity, and that the series may require differencing. 
 
-- based on the decomp and the acf/ PACF thought that seasonal models would be needed
-- chose the SARIMA and the basic structural model
-    - SARIMA because its the standard for time series + seasonality
-    - BSM because it could represent both seasonality and a local trend - because there doesn't seem to be a consistent trend in the data
+The PACF plot for the series has a clear cut off with only 1 significant lag. This behavior suggests the series has an autoregressive component. 
+
+Based on observations from the decomposition of the series and the ACF and PACF, we thought that models accounting for seasonality would be best for the series. The initial models that were chosen were the SARIMA and the Basic Structural Model.  
+
     
 SARIMA
-```{r, echo = FALSE, warning= FALSE}
+
+The SARIMA model was chosen for forecasting our series due to it's widely used and well established approach to time series analysis with seasonality. The autofit SARIMA model was calculated to be SARIMA(1,1,1)(1,0,0)[12]. The forecast of our data compared with the true observations for 2025 is shown in Figure X. 
+
+
+```{r, echo = FALSE, warning= FALSE, message = FALSE}
 auto_sarima111_100_fit <- auto.arima(ts_goose_train)
 auto_sarima111_100_for <- forecast(auto_sarima111_100_fit, h = 12)
 
@@ -227,9 +261,11 @@ sarima111_100_scores
 ```
 
 
-BSM model
+#### BSM model
 
-```{r, echo = FALSE, warning= FALSE}
+The second model that was chosen for forecasting the Canada Goose data was the Basic Structural Model. This model was chosen due to its ability to both handle seasonality and to account for a localized trend. Because there did not appear to be a clear directional trend in the series, the BSM model was potentially a solution for modeling. The 2025 forecast of the BSM model compared with the true observations for 2025 is shown in Figure X. 
+
+```{r, echo = FALSE, warning= FALSE, message=FALSE}
 
 structs_nafix <- StructTS(ts_goose_train, type = "BSM",
                          fixed=c(NA,NA,NA,NA))
@@ -239,12 +275,12 @@ structs_nafix <- StructTS(ts_goose_train, type = "BSM",
 
 
 #this function has convergence issues
-checkresiduals(structs_nafix)
+#checkresiduals(structs_nafix)
 
 #Generating forecasts
 # StructTS() does not call the forecast() internally so we need one more step
 auto_ss_for <- forecast(structs_nafix,h=12)
-plot(auto_ss_for)
+#plot(auto_ss_for)
 
 SS_for1_score <- accuracy(auto_ss_for$mean,goose_test)
 SS_for1_score
@@ -265,9 +301,11 @@ autoplot(auto_ss_for, series = "Auto-BSM")+
 
 ```
 
-Comparison of models
+#### Comparison of Models
 
-```{r, echo = FALSE, warning= FALSE}
+After fitting and forecasting the SARIMA and BSM models separately, the results of the forecasting were plotted together for intitial comparison (Figure X). While both models were able to capture the general seasonality of the data, neither were able to predict the magnitude of the seasonal dip in the series. 
+
+```{r, echo = FALSE, warning= FALSE, message=FALSE, fig.cap= "Comparison of forecasts for 2025 Canada Goose Observations"}
 
 autoplot(ts_goose_test, series = "True Observations")+
   autolayer(auto_sarima111_100_for,PI=FALSE, series = "Auto-SARIMA")+
@@ -281,7 +319,7 @@ autoplot(ts_goose_test, series = "True Observations")+
 
 
 ```
-
+To further compare the results of the forecasting models, error metrics were calculated for both models (Table X). These metrics included: Mean Error (ME), Root Mean Square Error (RMSE), Mean Absolute Error (MAE), Mean Percent Error (MPE), and Mean Absolute Percent Error (MAPE). The SARIMA model outperformed the BSM model in all error metrics with the exception of Mean Error (ME), making it the top performing model for the Canada Goose monthly observation data. 
 
 ```{r, echo = FALSE, warning= FALSE}
 
@@ -289,15 +327,18 @@ goose_scores <- as.data.frame(rbind(SS_for1_score, sarima111_100_scores))
 row.names(goose_scores) <- c("Auto-BSM", "Auto-SARIMA")
 
 #choose model with lowest RMSE
-best_model_index_goose <- which.min(goose_scores[,"RMSE"])
-cat("The best model by RMSE is:", row.names(goose_scores[best_model_index_goose,])) 
+#best_model_index_goose <- which.min(goose_scores[,"RMSE"])
+#cat("The best model by RMSE is:", row.names(goose_scores[best_model_index_goose,])) 
 
 
-#kbl(goose_scores, 
- #     caption = "Forecasts for Monthly Canada Goose Observations",
-  #    digits = array(2,ncol(goose_scores))) %>%
-  #kable_styling(full_width = FALSE, position = "center", latex_options = "hold_position") %>%
-  #kable_styling(latex_options="striped", stripe_index = which.min(goose_scores[,"RMSE"]))
+kbl(goose_scores,
+    caption = "Forecasts for Monthly Canada Goose Observations",
+    digits = array(2, ncol(goose_scores))) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    latex_options = c("hold_position", "striped")
+  )
 
 ```
 
