@@ -1,0 +1,329 @@
+---
+title: "Final_Report"
+output: html_document
+date: "2026-04-20"
+---
+
+```{r, include=FALSE}
+
+library(forecast)
+library(Kendall)
+library(tseries)
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(cowplot)
+library(lubridate)
+library(ggplot2)
+library(smooth)
+library(zoo)
+library(kableExtra)
+library(tidyr)
+library(RColorBrewer)
+
+
+```
+
+
+# Introduction, Motivation, Relevance, Objectives
+
+Anthropogenic changes have significantly affected bird diversity, making it important to quantify how bird populations have shifted over time at the species level. These impacts may not be uniform, as different residency groups (e.g., residents and migrants) can respond differently to environmental changes within the same region. In particular, different residency types may exhibit distinct seasonal patterns, highlighting the importance of using time series approaches to capture both long-term trends and seasonality. Therefore, examining variation across residency types can provide deeper insights into community dynamics and improve our understanding of how human activities shape bird populations.
+
+Therefore, this project focuses on Durham County as a case study to analyze and model long-term trends in bird occurrence across different residency groups using time series approaches. The three types of residency groups that we will be investigating in this study include resident, summer migrant, and winter migrant species, represented by the Canada Goose, Ruby-Throated Hummingbird, and the Yellow-Rumped Warbler, respectively. Indicator species were selected based on their residency pattern and abundance of data for Durham, NC. 
+
+^^took this from the abstract submission/ added a little bit about our species
+- maybe include a little bit more about background - in the slides we talked about the decline of migrant bird populations? (60% since 1900)
+
+
+# Dataset information
+
+The data for this project are sourced from eBird, a global citizen science database from the Cornell Lab or Ornithology. While this study only analyzes data for three bird species in Durham, NC, the eBird dataset contains data for over 2000 species globally, making it comprehensive resource for ornithology efforts all over the world. 
+
+For the intial download of data from eBird, the data request was filtered to our indicator species in Durham, NC. From this, we recieved a dataset with 54246 recorded observations for our three species between February 20, 2002 to January 31, 2026. The dataset included information on species identification, observation details (counts, behavior, breeding), spatial location, time, observer metadata, survey effort, and data quality/validation information.
+
+^thinking we will get into cleaning etc later on in the analysis?
+
+
+# Data Cleaning (general)
+
+
+
+
+# Analysis (Methods and Models)
+
+
+### Canada Goose + models / results
+
+- canada goose is the resident species
+- cleaned the data for monthly obs and for observer normalized monthly data
+- tell how many observations are in each dataset
+- summary statistics? 
+
+```{r, include = FALSE, warning= FALSE}
+
+goose_monthly <- read_csv("./Data/Cleaned_bySpecies/CanGoose_Monthly_withObserver.csv")
+
+goose_monthly <- goose_monthly %>% 
+  mutate(month = month(ymd(date))) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-01-01"))
+
+
+
+```
+
+- plot the general time series
+
+```{r, echo = FALSE, warning = FALSE, message= FALSE}
+
+ts_goose_monthly <- ts(goose_monthly$mean_obs, start = c(2015, 1), frequency = 12)
+
+autoplot(ts_goose_monthly)+
+  xlab("Time")+
+  ylab("Average Observations (Birds)")+
+  ggtitle("Monthly Canada Goose Data")+
+  theme_bw(base_size= 13)+
+  xlim(2015, 2025)+
+  scale_x_continuous(breaks = seq(2015, 2025, by = 1))
+
+ts_goose_cleaned <- tsclean(ts_goose_monthly)
+
+goose_train <- ts_goose_cleaned[1:109]
+ts_goose_train <- ts(goose_train, start = c(2015, 1), frequency = 12)
+
+goose_test <- ts_goose_cleaned[110:121]
+ts_goose_test <- ts(goose_test, start = c(2024, 2), frequency = 12)
+
+
+autoplot(ts_goose_monthly, series = "Original Data") +
+  autolayer(ts_goose_cleaned, series = "Cleaned Data") +
+  xlab("Time") +
+  ylab("Average Observations (Birds)") +
+  ggtitle("Outlier Removal: Monthly Canada Goose Data") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),  
+    legend.justification = c(0, 1),    
+    legend.title = element_blank())
+
+
+```
+
+
+- monthly obs distribution
+
+```{r, echo = FALSE, warning = FALSE,  fig.cap = "Distribution of Monthly Observations of Canada Geese"}
+month_colors <- c(
+  "1" = "#4575b4",  # Jan - cold blue
+  "2" = "#74add1",
+  "3" = "#abd9e9",
+  "4" = "#e0f3f8",
+  "5" = "#fee090",
+  "6" = "#fdae61",
+  "7" = "#f46d43",
+  "8" = "#f46d43",  # peak summer - hot red
+  "9" = "#fdae61",
+  "10" = "#fee090",
+  "11" = "#abd9e9",
+  "12" = "#4575b4"  # Dec - cold again
+)
+
+goose_monthly$month <- factor(goose_monthly$month, levels = 1:12)
+
+ggplot(goose_monthly, aes(x = month, y = mean_obs, fill = month))+
+  geom_boxplot()+
+  ylim(0, 200)+
+  theme_bw(base_size= 13)+
+  scale_fill_manual(values = month_colors)+
+  ggtitle("Monthly Canada Goose Observations in Durham (2015-2025)")+
+  ylab("Average Observations (Birds)")+
+  xlab("Month")+
+  theme(legend.position = "none")+ 
+  scale_x_discrete(labels = month.abb)
+
+
+
+``` 
+- canada goose has a slightly seasonal pattern, but consistent observations year round support the fact that certain canada goose species reside in Durham year round
+
+
+- next step --> decompose the data
+
+```{r, echo = FALSE, warning= FALSE}
+
+ts_goose_decomp = decompose(ts_goose_cleaned, type = "additive")
+
+autoplot(ts_goose_decomp)+
+  ggtitle("Decomposition of Cleaned Canada Goose Data")+
+  theme_bw(base_size= 13)
+
+
+```
+
+-- ACF and PACF
+- information about those
+
+```{r, echo = FALSE, warning= FALSE}
+a <- autoplot(Acf(ts_goose_cleaned, lag.max = 50, plot = FALSE))+
+  ggtitle(" ")+
+  theme_bw(base_size= 13)
+b <- autoplot(Pacf(ts_goose_cleaned, lag.max = 50, plot = FALSE))+
+  ggtitle(" ")+
+  theme_bw(base_size= 13)
+
+plot_row <- plot_grid(a, b, ncol = 2)
+
+# now add the title
+title <- ggdraw() + 
+  draw_label(
+    "Cleaned Canada Goose Data: ACF and PACF",
+    x = 0,
+    hjust = 0,
+    vjust = 1
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 0)
+  )
+plot_grid(
+  title, plot_row,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.09, 1)
+)
+
+
+```
+
+
+- based on the decomp and the acf/ PACF thought that seasonal models would be needed
+- chose the SARIMA and the basic structural model
+    - SARIMA because its the standard for time series + seasonality
+    - BSM because it could represent both seasonality and a local trend - because there doesn't seem to be a consistent trend in the data
+    
+SARIMA
+```{r, echo = FALSE, warning= FALSE}
+auto_sarima111_100_fit <- auto.arima(ts_goose_train)
+auto_sarima111_100_for <- forecast(auto_sarima111_100_fit, h = 12)
+
+autoplot(auto_sarima111_100_for, series = "Auto-SARIMA")+
+  autolayer(ts_goose_test, series = "True Observations")+
+  theme_bw(base_size= 13)+
+  xlim(2015, 2025)+
+  scale_x_continuous(breaks = seq(2015, 2025, by = 5))+
+  xlab("Time")+
+  ylab("Average Observations (Birds)")+
+  ggtitle("Auto-SARIMA Forecast") +
+  theme(
+    legend.position = c(0.02, 0.98),  
+    legend.justification = c(0, 1),    
+    legend.title = element_blank())
+
+sarima111_100_scores <- accuracy(auto_sarima111_100_for$mean,goose_test)
+sarima111_100_scores
+
+
+```
+
+
+BSM model
+
+```{r, echo = FALSE, warning= FALSE}
+
+structs_nafix <- StructTS(ts_goose_train, type = "BSM",
+                         fixed=c(NA,NA,NA,NA))
+#Variances:
+#  level    slope   seas     epsilon  
+# 431.92     0.00    11.17   117.16
+
+
+#this function has convergence issues
+checkresiduals(structs_nafix)
+
+#Generating forecasts
+# StructTS() does not call the forecast() internally so we need one more step
+auto_ss_for <- forecast(structs_nafix,h=12)
+plot(auto_ss_for)
+
+SS_for1_score <- accuracy(auto_ss_for$mean,goose_test)
+SS_for1_score
+
+autoplot(auto_ss_for, series = "Auto-BSM")+
+  autolayer(ts_goose_test, series = "True Observations")+
+  theme_bw(base_size= 13)+
+  xlim(2015, 2025)+
+  scale_x_continuous(breaks = seq(2015, 2025, by = 5))+
+  xlab("Time")+
+  ylab("Average Observations (Birds)")+
+  ggtitle("Auto-BSM Forecast") +
+  theme(
+    legend.position = c(0.02, 0.98),  
+    legend.justification = c(0, 1),    
+    legend.title = element_blank())
+
+
+```
+
+Comparison of models
+
+```{r, echo = FALSE, warning= FALSE}
+
+autoplot(ts_goose_test, series = "True Observations")+
+  autolayer(auto_sarima111_100_for,PI=FALSE, series = "Auto-SARIMA")+
+  autolayer(auto_ss_for,PI=FALSE, series= "Auto-BSM")+
+  theme_bw(base_size= 13)+
+  xlim(2024, 2025)+
+  scale_x_continuous(breaks = seq(2024, 2025, by = 1))+
+  xlab("Test Period (2024)")+
+  ylab("Average Observations (Birds)")+
+  ggtitle("Comparison Average Monthly Observation Forecasts")
+
+
+```
+
+
+```{r, echo = FALSE, warning= FALSE}
+
+goose_scores <- as.data.frame(rbind(SS_for1_score, sarima111_100_scores))
+row.names(goose_scores) <- c("Auto-BSM", "Auto-SARIMA")
+
+#choose model with lowest RMSE
+best_model_index_goose <- which.min(goose_scores[,"RMSE"])
+cat("The best model by RMSE is:", row.names(goose_scores[best_model_index_goose,])) 
+
+
+#kbl(goose_scores, 
+ #     caption = "Forecasts for Monthly Canada Goose Observations",
+  #    digits = array(2,ncol(goose_scores))) %>%
+  #kable_styling(full_width = FALSE, position = "center", latex_options = "hold_position") %>%
+  #kable_styling(latex_options="striped", stripe_index = which.min(goose_scores[,"RMSE"]))
+
+```
+
+
+
+
+
+### Warbler + models / results
+
+### Hummingbird models / results
+
+# Summary and Conclusions
+
+Im just brainstorming things to write about: 
+did all of us have similar models that forecasted well? 
+- which models worked best for each species if not
+
+Did the seasonal species models that worked work better?
+- would make sense if the resident species and migrant species had different best models ig
+
+Model performance for intial data vs observer normalized
+- I think im going to do like 3 models with the regular data and then like 3 with the observer normalized data/ compare the models that worked well for each/ did they change significantly
+
+
+
+
+
+
+
