@@ -1,0 +1,640 @@
+# YRWA Time Series Modeling & Forecasting
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(forecast)
+library(Kendall)
+library(tseries)
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(cowplot)
+library(lubridate)
+library(ggplot2)
+library(smooth)
+library(zoo)
+library(kableExtra)
+library(tidyr)
+
+```
+
+### Yellow-rumped warbler + models / results
+
+#### Monthly Observation
+
+```{r}
+# Monthly Data
+YRWA_monthly <- read.csv("./Data/Cleaned_bySpecies/Warbler_Monthly.csv")
+YRWA_monthly_obs <- read.csv("./Data/Cleaned_bySpecies/Warbler_Monthly_withObserver.csv")
+
+head(YRWA_monthly)
+head(YRWA_monthly_obs)
+```
+
+```{r}
+# filter observation from 2015-1-1 to 2025-12-31
+# filter observation from 2015-01-01 to 2025-12-31
+YRWA_monthly <- YRWA_monthly %>% 
+  mutate(
+    date = ymd(date),
+    month = month(date)
+  ) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-12-31"))
+
+YRWA_monthly_obs <- YRWA_monthly_obs %>% 
+  mutate(
+    date = ymd(date),
+    month = month(date)
+  ) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-12-31"))
+
+
+str(YRWA_monthly)
+head(YRWA_monthly)
+
+str(YRWA_monthly_obs)
+head(YRWA_monthly_obs)
+```
+
+
+```{r}
+# convert to ts
+YRWA_obs_ts <- ts(
+  YRWA_monthly$mean_obs,
+  start = c(2015, 1),
+  frequency = 12
+)
+
+# plot
+autoplot(YRWA_obs_ts) +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Monthly YRWA Observations (2015–2025)") +
+  theme_bw(base_size = 13)
+```
+
+```{r}
+YRWA_obs_ts_cleaned <- tsclean(YRWA_obs_ts)
+
+autoplot(YRWA_obs_ts, series = "Original Data") +
+  autolayer(YRWA_obs_ts_cleaned, series = "Cleaned Data") +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Outlier Removal: Monthly YRWA Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+
+```{r}
+YRWA_obs_stl <- stl(YRWA_obs_ts, s.window = "periodic")
+
+autoplot(YRWA_obs_stl)
+```
+
+#### Monthly Observer Ratio
+
+```{r}
+bird_data <- read.csv("./Data/Raw/eBird_Species_Data.csv")
+```
+
+```{r}
+# daily total observers
+daily_total_observers <- bird_data %>%
+  mutate(
+    OBSERVATION.DATE = as.Date(OBSERVATION.DATE),
+    date = OBSERVATION.DATE
+  ) %>%
+  filter(
+    date >= as.Date("2015-01-01") &
+    date <= as.Date("2025-12-31")
+  ) %>%
+  group_by(date) %>%
+  summarise(
+    total_observers = n_distinct(OBSERVER.ID),
+    .groups = "drop"
+  )
+
+head(daily_total_observers)
+```
+
+```{r}
+# daily observer
+YRWA_daily_obs <- read.csv("./Data/Cleaned_bySpecies/Warbler_Daily_withObserver.csv")
+
+YRWA_daily_obs <- YRWA_daily_obs %>%
+  mutate(
+    date = ymd(date),
+    month = month(date)
+  ) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-12-31"))
+
+head(YRWA_daily_obs)
+```
+
+```{r}
+# daily ratio
+YRWA_daily_ratio <- daily_total_observers %>%
+  left_join(YRWA_daily_obs, by = "date") %>%
+  mutate(
+    sum_observers = ifelse(is.na(sum_observers), 0, sum_observers),
+    sum_obs = ifelse(is.na(sum_obs), 0, sum_obs),
+    observer_ratio = ifelse(total_observers == 0, 0, sum_observers / total_observers)
+  )
+
+head(YRWA_daily_ratio)
+```
+
+```{r}
+# monthly ratio
+YRWA_monthly_ratio <- YRWA_daily_ratio %>%
+  mutate(date = floor_date(date, "month")) %>% 
+  group_by(date) %>%
+  summarise(
+    mean_obs = mean(sum_obs),
+    mean_observers = mean(sum_observers),
+    mean_observer_ratio = mean(observer_ratio),
+    .groups = "drop"
+  )
+
+head(YRWA_monthly_ratio)
+```
+
+
+```{r}
+# convert to monthly ts
+YRWA_ratio_ts <- ts(
+  YRWA_monthly_ratio$mean_observer_ratio,
+  start = c(2015, 1),
+  frequency = 12
+)
+
+# plot
+autoplot(YRWA_ratio_ts) +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Monthly YRWA Observer Ratio (2015–2025)") +
+  theme_bw(base_size = 13)
+```
+#### Data Visualization & Comparison
+
+```{r}
+month_colors <- c(
+  "1" = "#4575b4",  # Jan - cold blue
+  "2" = "#74add1",
+  "3" = "#abd9e9",
+  "4" = "#e0f3f8",
+  "5" = "#fee090",
+  "6" = "#fdae61",
+  "7" = "#f46d43",
+  "8" = "#f46d43",  # peak summer - hot red
+  "9" = "#fdae61",
+  "10" = "#fee090",
+  "11" = "#abd9e9",
+  "12" = "#4575b4"  # Dec - cold again
+)
+
+obs_df <- YRWA_monthly %>%
+  select(month, value = mean_obs) %>%
+  mutate(type = "Observations")
+
+ratio_df <- YRWA_daily_ratio %>%
+  select(month, value = observer_ratio) %>%
+  mutate(type = "Observer Ratio")
+
+plot_df <- bind_rows(obs_df, ratio_df)
+
+plot_df$month <- factor(plot_df$month, levels = 1:12)
+
+# plot
+ggplot(plot_df, aes(x = month, y = value, fill = month)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  facet_wrap(~type, scales = "free_y") +
+  theme_bw(base_size = 13) +
+  scale_fill_manual(values = month_colors) +
+  scale_x_discrete(labels = month.abb) +
+  labs(
+    title = "Seasonal Patterns: Observations vs Observer Ratio",
+    x = "Month",
+    y = NULL
+  ) +
+  theme(
+    legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
+
+
+```{r}
+autoplot(YRWA_obs_ts, series = "Observations") +
+  autolayer(YRWA_ratio_ts * max(YRWA_obs_ts), 
+            series = "Observer Ratio (scaled)") +
+  xlab("Time") +
+  ylab("Value") +
+  ggtitle("Comparison: Observations vs Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+
+#### Observation Time Series Model
+
+```{r}
+adf.test(YRWA_obs_ts)
+```
+
+```{r}
+ggAcf(YRWA_obs_ts)
+ggPacf(YRWA_obs_ts)
+```
+
+##### SARIMA
+```{r}
+fit_obs_sarima <- auto.arima(
+  YRWA_obs_ts,
+  seasonal = TRUE
+)
+
+summary(fit_obs_sarima)
+checkresiduals(fit_obs_sarima)
+```
+##### ARIMA +Fourier
+```{r}
+fit_obs_fourier <- auto.arima(
+  YRWA_obs_ts,
+  seasonal = FALSE,
+  xreg = fourier(YRWA_obs_ts, K = 2)
+)
+
+summary(fit_obs_fourier)
+checkresiduals(fit_obs_fourier)
+```
+
+##### ETS
+```{r}
+fit_obs_ets <- ets(YRWA_obs_ts)
+
+summary(fit_obs_ets)
+checkresiduals(fit_obs_ets)
+```
+
+##### Train test split
+```{r}
+obs_train_ts <- window(YRWA_obs_ts, end = c(2024, 12))
+obs_test_ts  <- window(YRWA_obs_ts, start = c(2025, 1))
+
+h <- length(obs_test_ts)
+
+fit_obs_sarima_train <- auto.arima(obs_train_ts, seasonal = TRUE)
+
+fit_obs_fourier_train <- auto.arima(
+  obs_train_ts,
+  seasonal = FALSE,
+  xreg = fourier(obs_train_ts, K = 2)
+)
+
+fit_obs_ets_train <- ets(obs_train_ts)
+```
+
+##### Forecating
+```{r}
+fc_obs_sarima <- forecast(fit_obs_sarima_train, h = h)
+
+fc_obs_fourier <- forecast(
+  fit_obs_fourier_train,
+  xreg = fourier(obs_train_ts, K = 2, h = h)
+)
+
+fc_obs_ets <- forecast(fit_obs_ets_train, h = h)
+```
+
+```{r}
+autoplot(fc_obs_sarima) +
+  autolayer(obs_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("SARIMA Forecast vs Actual: YRWA Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+```{r}
+autoplot(fc_obs_fourier) +
+  autolayer(obs_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("ARIMA + Fourier Forecast vs Actual: YRWA Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+```{r}
+autoplot(fc_obs_ets) +
+  autolayer(obs_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("ETS Forecast vs Actual: YRWA Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+```{r}
+obs_plot_df <- data.frame(
+  Time = time(obs_test_ts),
+  Actual = as.numeric(obs_test_ts),
+  SARIMA = as.numeric(fc_obs_sarima$mean),
+  Fourier = as.numeric(fc_obs_fourier$mean),
+  ETS = as.numeric(fc_obs_ets$mean)
+) %>%
+  pivot_longer(
+    cols = c("SARIMA", "Fourier", "ETS"),
+    names_to = "Model",
+    values_to = "Forecast"
+  )
+
+
+ggplot(obs_plot_df, aes(x = Time)) +
+  geom_line(aes(y = Actual), linewidth = 1.1, color = "black") +
+  geom_line(aes(y = Forecast, color = Model), linewidth = 1) +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Observed vs Forecasted YRWA Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
+
+
+```{r}
+obs_sarima_acc <- accuracy(fc_obs_sarima, obs_test_ts)
+obs_fourier_acc <- accuracy(fc_obs_fourier, obs_test_ts)
+obs_ets_acc <- accuracy(fc_obs_ets, obs_test_ts)
+
+obs_acc_table <- rbind(
+  SARIMA = obs_sarima_acc[2, c("RMSE", "MAE", "MAPE", "MASE")],
+  Fourier_ARIMA = obs_fourier_acc[2, c("RMSE", "MAE", "MAPE", "MASE")],
+  ETS = obs_ets_acc[2, c("RMSE", "MAE", "MAPE", "MASE")]
+)
+
+obs_acc_df <- data.frame(
+  Model = rownames(obs_acc_table),
+  obs_acc_table,
+  row.names = NULL
+)
+
+obs_acc_df
+```
+
+```{r}
+best_rmse_model <- obs_acc_df$Model[which.min(obs_acc_df$RMSE)]
+best_mae_model <- obs_acc_df$Model[which.min(obs_acc_df$MAE)]
+best_mase_model <- obs_acc_df$Model[which.min(obs_acc_df$MASE)]
+
+best_rmse_model
+best_mae_model
+best_mase_model
+```
+```{r}
+# Final SARIMA model (full data)
+fit_obs_final <- auto.arima(
+  YRWA_obs_ts,
+  seasonal = TRUE
+)
+
+summary(fit_obs_final)
+checkresiduals(fit_obs_final)
+
+# forecast 24 months ahead
+fc_obs_final <- forecast(
+  fit_obs_final,
+  h = 12
+)
+
+autoplot(fc_obs_final) +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Final Forecast: YRWA Monthly Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+
+
+
+
+#### Ratio Modeling
+
+```{r}
+YRWA_ratio_ts_cleaned <- tsclean(YRWA_ratio_ts)
+
+autoplot(YRWA_ratio_ts, series = "Original Data") +
+  autolayer(YRWA_ratio_ts_cleaned, series = "Cleaned Data") +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("Outlier Removal (Not Recommended for Ratio Data)") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+```{r}
+#STL
+YRWA_ratio_stl <- stl(YRWA_ratio_ts, s.window = "periodic")
+
+autoplot(YRWA_ratio_stl)
+```
+
+
+##### ACF & PACF
+```{r}
+# ADF test
+adf.test(YRWA_ratio_ts)
+```
+
+
+```{r}
+ggAcf(YRWA_ratio_ts)
+ggPacf(YRWA_ratio_ts)
+```
+
+```{r}
+# train: 2015–2024
+YRWA_train_ts <- window(YRWA_ratio_ts, end = c(2024, 12))
+
+# test: 2024–2025
+YRWA_test_ts <- window(YRWA_ratio_ts, start = c(2025, 1))
+```
+
+##### SRIMA
+```{r}
+fit_ratio_sarima <- auto.arima(
+  YRWA_train_ts,
+  seasonal = TRUE
+)
+
+summary(fit_ratio_sarima)
+checkresiduals(fit_ratio_sarima)
+```
+
+##### ARIMA + Fourier
+```{r}
+fit_ratio_fourier <- auto.arima(
+  YRWA_train_ts,
+  seasonal = FALSE,
+  xreg = fourier(YRWA_train_ts, K = 2)
+)
+
+summary(fit_ratio_fourier)
+checkresiduals(fit_ratio_fourier)
+```
+
+##### ETS
+```{r}
+
+fit_ratio_ets <- ets(YRWA_train_ts)
+
+summary(fit_ratio_ets)
+checkresiduals(fit_ratio_ets)
+```
+
+
+
+##### forecasting
+```{r}
+h <- length(YRWA_test_ts)
+
+fc_ratio_sarima <- forecast(
+  fit_ratio_sarima,
+  h = h
+)
+
+fc_ratio_fourier <- forecast(
+  fit_ratio_fourier,
+  xreg = fourier(YRWA_train_ts, K = 2, h = h)
+)
+
+fc_ratio_ets <- forecast(
+  fit_ratio_ets,
+  h = h
+)
+```
+
+```{r}
+autoplot(fc_ratio_sarima) +
+  autolayer(YRWA_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("SARIMA Forecast vs Actual: YRWA Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+```{r}
+autoplot(fc_ratio_fourier) +
+  autolayer(YRWA_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("ARIMA + Fourier Forecast vs Actual: YRWA Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+```{r}
+autoplot(fc_ratio_ets) +
+  autolayer(YRWA_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("ETS Forecast vs Actual: YRWA Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+
+```{r}
+sarima_acc <- accuracy(fc_ratio_sarima, YRWA_test_ts)
+fourier_acc <- accuracy(fc_ratio_fourier, YRWA_test_ts)
+ets_acc <- accuracy(fc_ratio_ets, YRWA_test_ts)
+
+rbind(
+  SARIMA = sarima_acc[2, c("RMSE", "MAE", "MAPE", "MASE")],
+  Fourier_ARIMA = fourier_acc[2, c("RMSE", "MAE", "MAPE", "MASE")],
+  ETS = ets_acc[2, c("RMSE", "MAE", "MAPE", "MASE")]
+)
+```
+
+```{r}
+fit_ratio_sarima_final <- auto.arima(
+  YRWA_ratio_ts,
+  seasonal = TRUE
+)
+
+summary(fit_ratio_sarima_final)
+checkresiduals(fit_ratio_sarima_final)
+```
+
+```{r}
+h <- 12
+
+fc_ratio_final <- forecast(
+  fit_ratio_sarima_final,
+  h = h
+)
+
+autoplot(fc_ratio_final) +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("Forecast of YRWA Observer Ratio") +
+  theme_bw(base_size = 13)
+```
+
+
