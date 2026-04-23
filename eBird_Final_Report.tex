@@ -1,0 +1,449 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+]{article}
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{wrapfig}
+\usepackage{float}
+\usepackage{colortbl}
+\usepackage{pdflscape}
+\usepackage{tabu}
+\usepackage{threeparttable}
+\usepackage{threeparttablex}
+\usepackage[normalem]{ulem}
+\usepackage{makecell}
+\usepackage{xcolor}
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={Final\_Report},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\title{Final\_Report}
+\author{}
+\date{\vspace{-2.5em}2026-04-20}
+
+\begin{document}
+\maketitle
+
+\section{Introduction, Motivation, Relevance,
+Objectives}\label{introduction-motivation-relevance-objectives}
+
+Anthropogenic environmental change has significantly altered bird
+diversity and population dynamics, with particularly strong declines
+observed among migratory species. Long-term studies estimate that North
+American bird populations have declined by nearly 60\% since 1970,
+underscoring the importance of understanding species-specific trends
+over time.
+
+These impacts are not uniform across species, as different residency
+groups (resident, summer migrant, winter migrant) respond differently to
+environmental pressures. Seasonal variation in occurrence may differ
+substantially between these groups, making time series approaches
+especially valuable for capturing both long-term trends and periodic
+fluctuations.
+
+This study uses Durham County, North Carolina as a case study to analyze
+long-term trends in bird occurrence across residency types using time
+series modeling. Three indicator species were selected to represent
+different residency strategies: Canada Goose (resident), Ruby-throated
+Hummingbird (summer migrant), and Yellow-rumped Warbler (winter
+migrant). These species were chosen based on their ecological relevance
+and the availability of consistent observational data.
+
+\^{}\^{}took this from the abstract submission/ added a little bit about
+our species - maybe include a little bit more about background - in the
+slides we talked about the decline of migrant bird populations? (60\%
+since 1900)
+
+\section{Dataset information}\label{dataset-information}
+
+The data for this project are sourced from eBird, a global citizen
+science database from the Cornell Lab or Ornithology. While this study
+only analyzes data for three bird species in Durham, NC, the eBird
+dataset contains data for over 2000 species globally, making it
+comprehensive resource for ornithology efforts all over the world.
+
+For the intial download of data from eBird, the data request was
+filtered to our indicator species in Durham, NC. From this, we recieved
+a dataset with 54246 recorded observations for our three species between
+February 20, 2002 to January 31, 2026. The dataset included information
+on species identification, observation details (counts, behavior,
+breeding), spatial location, time, observer metadata, survey effort, and
+data quality/validation information.
+
+\^{}thinking we will get into cleaning etc later on in the analysis?
+
+\section{Data Cleaning (general)}\label{data-cleaning-general}
+
+\begin{itemize}
+\tightlist
+\item
+  chose to use between 2015 and 2015
+\end{itemize}
+
+\section{Analysis (Methods and
+Models)}\label{analysis-methods-and-models}
+
+\subsubsection{Canada Goose + models /
+results}\label{canada-goose-models-results}
+
+For the time series analysis of Canada Goose observation data, I chose
+to use the monthly data for training and forecasting models. Prior to
+any modeling, general data exploration and further cleaning were
+performed.
+
+After intitial plotting of the time series, outlier removal was
+performed using tsclean() (Figure X).
+
+\begin{figure}
+\centering
+\includegraphics{eBird_Final_Report_files/figure-latex/unnamed-chunk-3-1.pdf}
+\caption{Initial time series plot and cleaning of the monthly Canada
+Goose Observations Data}
+\end{figure}
+
+After removing outliers from the data, summary statistics were also
+assessed (Table X). The wide range in monthly observations and large
+standard deviation relative to the mean indicated that while a resident
+species, observations may vary over the course of the year.
+
+\begin{table}[!h]
+\centering
+\caption{\label{tab:unnamed-chunk-4}Summary Statistics for Cleaned Monthly Goose Observations}
+\centering
+\begin{tabular}[t]{rrrrrrr}
+\toprule
+Mean & Median & SD & Min & Max & 1st Quartile & 3rd Quartile\\
+\midrule
+53.44 & 41.55 & 35.43 & 9.6 & 189.89 & 25.94 & 75.28\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+To begin investigating potential seasonality or variations in
+observations throughout the year, the distribution of monthly
+observations were plotted and the series was decomposed into seasonal,
+trend, and residual components (Figure X).
+
+\includegraphics{eBird_Final_Report_files/figure-latex/unnamed-chunk-5-1.pdf}
+From the plot of distributions of monthly observations, the Canada Goose
+appears to have a slight seasonal pattern. However, consistency in
+observations year-round support the Canada Goose's resident species
+status.
+
+The decomposition of the cleaned series also shows a strong seasonal
+pattern and trend. However the trend does not appear to have a
+consistent pattern over the course of the time series.
+
+\paragraph{ACF and PACF}\label{acf-and-pacf}
+
+The ACF and PACF were then plotted and assessed for initial modeling
+considerations (Figure X).
+
+\begin{figure}
+\centering
+\includegraphics{eBird_Final_Report_files/figure-latex/unnamed-chunk-6-1.pdf}
+\caption{ACF and PACF plots for the cleaned monthly Canada Goose time
+series}
+\end{figure}
+
+The ACF plot for the series shows a strong seasonality at lag 12,
+suggesting that models will either need to account for seasonality, or
+seasonality should be removed prior to modeling. The gradual decacy of
+the series also suggests stationarity, and that the series may require
+differencing.
+
+The PACF plot for the series has a clear cut off with only 1 significant
+lag. This behavior suggests the series has an autoregressive component.
+
+Based on observations from the decomposition of the series and the ACF
+and PACF, we thought that models accounting for seasonality would be
+best for the series. The initial models that were chosen were the SARIMA
+and the Basic Structural Model.
+
+SARIMA
+
+The SARIMA model was chosen for forecasting our series due to it's
+widely used and well established approach to time series analysis with
+seasonality. The autofit SARIMA model was calculated to be
+SARIMA(1,1,1)(1,0,0){[}12{]}. The forecast of our data compared with the
+true observations for 2025 is shown in Figure X.
+
+\includegraphics{eBird_Final_Report_files/figure-latex/unnamed-chunk-7-1.pdf}
+
+\begin{verbatim}
+##                 ME     RMSE      MAE       MPE     MAPE
+## Test set -16.58979 26.10221 22.97642 -85.33543 92.72052
+\end{verbatim}
+
+\paragraph{BSM model}\label{bsm-model}
+
+The second model that was chosen for forecasting the Canada Goose data
+was the Basic Structural Model. This model was chosen due to its ability
+to both handle seasonality and to account for a localized trend. Because
+there did not appear to be a clear directional trend in the series, the
+BSM model was potentially a solution for modeling. The 2025 forecast of
+the BSM model compared with the true observations for 2025 is shown in
+Figure X.
+
+\begin{verbatim}
+##                 ME     RMSE      MAE       MPE     MAPE
+## Test set -13.94265 29.06752 24.32334 -90.08288 102.6207
+\end{verbatim}
+
+\includegraphics{eBird_Final_Report_files/figure-latex/unnamed-chunk-8-1.pdf}
+
+\paragraph{Comparison of Models}\label{comparison-of-models}
+
+After fitting and forecasting the SARIMA and BSM models separately, the
+results of the forecasting were plotted together for intitial comparison
+(Figure X). While both models were able to capture the general
+seasonality of the data, neither were able to predict the magnitude of
+the seasonal dip in the series.
+
+\includegraphics{eBird_Final_Report_files/figure-latex/unnamed-chunk-9-1.pdf}
+To further compare the results of the forecasting models, error metrics
+were calculated for both models (Table X). These metrics included: Mean
+Error (ME), Root Mean Square Error (RMSE), Mean Absolute Error (MAE),
+Mean Percent Error (MPE), and Mean Absolute Percent Error (MAPE). The
+SARIMA model outperformed the BSM model in all error metrics with the
+exception of Mean Error (ME), making it the top performing model for the
+Canada Goose monthly observation data.
+
+\begin{table}[!h]
+\centering
+\caption{\label{tab:unnamed-chunk-10}Forecasts for Monthly Canada Goose Observations}
+\centering
+\begin{tabular}[t]{l|r|r|r|r|r}
+\hline
+  & ME & RMSE & MAE & MPE & MAPE\\
+\hline
+\cellcolor{gray!10}{Auto-BSM} & \cellcolor{gray!10}{-13.94} & \cellcolor{gray!10}{29.07} & \cellcolor{gray!10}{24.32} & \cellcolor{gray!10}{-90.08} & \cellcolor{gray!10}{102.62}\\
+\hline
+Auto-SARIMA & -16.59 & 26.10 & 22.98 & -85.34 & 92.72\\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Warbler + models / results}\label{warbler-models-results}
+
+\subsubsection{Hummingbird models /
+results}\label{hummingbird-models-results}
+
+For the Ruby-throated Hummingbird analysis, I used monthly observation
+data and split it into training (2015-2024) and test (2025) periods to
+evaluate forecast performance.
+
+Before modeling, I cleaned the data and removed outliers using tsclean()
+(Figure X).
+
+\begin{verbatim}
+## Scale for x is already present.
+## Adding another scale for x, which will replace the existing scale.
+\end{verbatim}
+
+\begin{figure}
+\centering
+\includegraphics{eBird_Final_Report_files/figure-latex/humm_clean-1.pdf}
+\caption{Initial time series and outlier removal for monthly
+Ruby-throated Hummingbird data}
+\end{figure}
+
+After cleaning, I calculated summary statistics. The data shows strong
+seasonal variation - observations are concentrated in summer breeding
+months (April-September) and drop to near-zero in winter when
+hummingbirds migrate south.
+
+\begin{table}[!h]
+\centering
+\caption{\label{tab:humm_stats}Summary Statistics for Cleaned Monthly Hummingbird Observations}
+\centering
+\begin{tabular}[t]{rrrrrrr}
+\toprule
+Mean & Median & SD & Min & Max & 1st Quartile & 3rd Quartile\\
+\midrule
+3.87 & 2.96 & 4.15 & 0 & 16.13 & 0 & 6.72\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+To visualize the seasonal pattern, I plotted monthly distributions and
+decomposed the series (Figure X).
+
+\begin{figure}
+\centering
+\includegraphics{eBird_Final_Report_files/figure-latex/humm_explore-1.pdf}
+\caption{Monthly distributions and decomposition of Ruby-throated
+Hummingbird time series}
+\end{figure}
+
+The boxplot confirms the hummingbird's summer migrant status -
+observations peak in breeding season (May-August) and are basically zero
+in winter. The decomposition shows a strong seasonal component with
+consistent annual pattern and no obvious long-term trend.
+
+\paragraph{ACF and PACF}\label{acf-and-pacf-1}
+
+I examined the ACF and PACF to help with model selection (Figure X).
+
+\begin{figure}
+\centering
+\includegraphics{eBird_Final_Report_files/figure-latex/humm_acf-1.pdf}
+\caption{ACF and PACF for the cleaned monthly Ruby-throated Hummingbird
+series}
+\end{figure}
+
+The ACF shows strong seasonal autocorrelation with significant spikes at
+lags 12, 24, and 36, which makes sense for annual patterns. The gradual
+decay suggests the series is non-stationary. The PACF has significant
+spikes at lags 1 and 12, indicating potential autoregressive components
+at both seasonal and non-seasonal scales.
+
+I used ndiffs() and nsdiffs() to determine differencing needs - the
+functions suggested one non-seasonal difference and one seasonal
+difference. Based on the strong seasonality in the decomposition and
+ACF/PACF patterns, I chose to use SARIMA models which can handle
+seasonal data.
+
+\paragraph{Auto SARIMA}\label{auto-sarima}
+
+I used auto.arima() to automatically select the best SARIMA model.
+
+The function selected an ARIMA(2,0,1)(1,1,0){[}12{]} model with two
+autoregressive terms, one moving average term, and one seasonal
+autoregressive term with seasonal differencing. I checked the residuals
+to make sure they looked like white noise - the Ljung-Box test gave a
+p-value of 0.39, which means the residuals passed the test (no
+significant autocorrelation left over).
+
+\paragraph{Seasonal Naive}\label{seasonal-naive}
+
+For comparison, I also fit a seasonal naive model as a simple benchmark.
+This method just uses last year's observation for the same month as the
+forecast.
+
+The seasonal naive residuals showed significant autocorrelation,
+especially at seasonal lags, suggesting it's leaving patterns on the
+table that SARIMA should be able to capture.
+
+\paragraph{Comparison of Models}\label{comparison-of-models-1}
+
+I compared both models' forecasts against the actual 2025 observations
+(Figure X).
+
+\begin{verbatim}
+## Scale for x is already present.
+## Adding another scale for x, which will replace the existing scale.
+## Scale for x is already present.
+## Adding another scale for x, which will replace the existing scale.
+\end{verbatim}
+
+\begin{figure}
+\centering
+\includegraphics{eBird_Final_Report_files/figure-latex/humm_compare-1.pdf}
+\caption{Forecast comparison for 2025 Ruby-throated Hummingbird
+observations}
+\end{figure}
+
+Both models capture the seasonal pattern of summer presence and winter
+absence. To quantify performance, I calculated error metrics (Table X).
+
+\begin{table}[!h]
+\centering
+\caption{\label{tab:humm_accuracy}Forecast Accuracy for Monthly Ruby-throated Hummingbird Observations}
+\centering
+\begin{tabular}[t]{lrrrrr}
+\toprule
+  & ME & RMSE & MAE & MPE & MAPE\\
+\midrule
+\cellcolor{gray!10}{Auto-SARIMA} & \cellcolor{gray!10}{0.77} & \cellcolor{gray!10}{2.06} & \cellcolor{gray!10}{1.16} & \cellcolor{gray!10}{NaN} & \cellcolor{gray!10}{Inf}\\
+Seasonal Naive & 1.58 & 2.49 & 1.71 & 23.82 & 35.19\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Auto-SARIMA model beat the Seasonal Naive benchmark on all the
+interpretable metrics. SARIMA got an RMSE of 2.06 vs 2.49 for Seasonal
+Naive - that's a 17\% improvement. Note that MPE and MAPE have undefined
+values (NaN/Inf) for SARIMA because of division by zero when actual
+observations are zero in winter. Overall, SARIMA is the better model for
+hummingbird data and does a good job capturing the timing and magnitude
+of peak observations during breeding season.
+
+\section{Summary and Conclusions}\label{summary-and-conclusions}
+
+Im just brainstorming things to write about: did all of us have similar
+models that forecasted well? - which models worked best for each species
+if not
+
+Did the seasonal species models that worked work better? - would make
+sense if the resident species and migrant species had different best
+models ig
+
+Model performance for intial data vs observer normalized - I think im
+going to do like 3 models with the regular data and then like 3 with the
+observer normalized data/ compare the models that worked well for each/
+did they change significantly
+
+\end{document}

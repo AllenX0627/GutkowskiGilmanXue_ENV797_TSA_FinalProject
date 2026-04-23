@@ -1,8 +1,8 @@
 ---
 title: "Final_Report"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 date: "2026-04-20"
 ---
 
@@ -354,11 +354,11 @@ kbl(goose_scores,
 
 For the Ruby-throated Hummingbird analysis, I used monthly observation data and split it into training (2015-2024) and test (2025) periods to evaluate forecast performance.
 
-Before modeling, I cleaned the data and removed outliers using tsclean() (Figure X).
+Before modeling, I cleaned the data and removed outliers using tsclean().
 
 ```{r humm_load, include=FALSE}
 #load data
-humm_monthly <- read.csv("../Data/Cleaned_bySpecies/Hummingbird_Monthly.csv")
+humm_monthly <- read.csv("./Data/Cleaned_bySpecies/Hummingbird_Monthly.csv")
 humm_monthly <- humm_monthly %>%
   mutate(date = as.Date(date)) %>%
   filter(date >= as.Date("2015-01-01") & date <= as.Date("2025-12-31"))
@@ -426,7 +426,7 @@ kbl(stats_table,
   )
 ```
 
-To visualize the seasonal pattern, I plotted monthly distributions and decomposed the series (Figure X).
+To visualize the seasonal pattern, I plotted monthly distributions and decomposed the series.
 
 ```{r humm_explore, echo=FALSE, fig.height=4, fig.width=14, fig.cap="Monthly distributions and decomposition of Ruby-throated Hummingbird time series"}
 #boxplot by month
@@ -505,7 +505,7 @@ The seasonal naive residuals showed significant autocorrelation, especially at s
 
 #### Comparison of Models
 
-I compared both models' forecasts against the actual 2025 observations (Figure X).
+I compared both models' forecasts against the actual 2025 observations.
 
 ```{r humm_compare, echo=FALSE, fig.cap="Forecast comparison for 2025 Ruby-throated Hummingbird observations"}
 ts_humm_test <- ts(humm_test_obs, start = c(2025, 1), frequency = 12)
@@ -523,7 +523,7 @@ autoplot(ts_humm_test, series = "True Observations") +
         legend.title = element_blank())
 ```
 
-Both models capture the seasonal pattern of summer presence and winter absence. To quantify performance, I calculated error metrics (Table X).
+Both models capture the seasonal pattern of summer presence and winter absence. To quantify performance, I calculated error metrics.
 
 ```{r humm_accuracy, echo=FALSE}
 sarima_scores <- accuracy(sarima_forecast$mean, humm_test_obs)
