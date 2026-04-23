@@ -352,6 +352,201 @@ kbl(goose_scores,
 
 ### Hummingbird models / results
 
+For the Ruby-throated Hummingbird analysis, I used monthly observation data and split it into training (2015-2024) and test (2025) periods to evaluate forecast performance.
+
+Before modeling, I cleaned the data and removed outliers using tsclean() (Figure X).
+
+```{r humm_load, include=FALSE}
+#load data
+humm_monthly <- read.csv("../Data/Cleaned_bySpecies/Hummingbird_Monthly.csv")
+humm_monthly <- humm_monthly %>%
+  mutate(date = as.Date(date)) %>%
+  filter(date >= as.Date("2015-01-01") & date <= as.Date("2025-12-31"))
+
+#split into train and test
+humm_train <- humm_monthly %>%
+  filter(date >= as.Date("2015-01-01") & date <= as.Date("2024-12-01"))
+
+humm_test <- humm_monthly %>%
+  filter(date >= as.Date("2025-01-01") & date <= as.Date("2025-12-01"))
+
+#create ts object for training data
+ts_humm_train <- ts(humm_train$mean_obs, start = c(2015, 1), frequency = 12)
+humm_test_obs <- humm_test$mean_obs
+```
+
+```{r humm_clean, echo=FALSE, fig.width=12, fig.height=5, fig.cap="Initial time series and outlier removal for monthly Ruby-throated Hummingbird data"}
+#original plot
+plot1 <- autoplot(ts_humm_train) +
+  xlab("Time") +
+  ylab("Mean Daily Observations") +
+  ggtitle("Monthly Hummingbird Data") +
+  theme_bw(base_size = 13) +
+  scale_x_continuous(breaks = seq(2015, 2025, by = 1))
+
+#remove outliers
+ts_humm_cleaned <- tsclean(ts_humm_train)
+
+#comparison plot
+plot2 <- autoplot(ts_humm_train, series = "Original Data") +
+  autolayer(ts_humm_cleaned, series = "Cleaned Data") +
+  xlab("Time") +
+  ylab("Mean Daily Observations") +
+  ggtitle("Outlier Removal: Monthly Hummingbird Data") +
+  theme_bw(base_size = 13) +
+  theme(legend.position = c(0.02, 0.98),
+        legend.justification = c(0, 1),
+        legend.title = element_blank())
+
+plot_grid(plot1, plot2, ncol = 2)
+```
+
+After cleaning, I calculated summary statistics. The data shows strong seasonal variation - observations are concentrated in summer breeding months (April-September) and drop to near-zero in winter when hummingbirds migrate south.
+
+```{r humm_stats, echo=FALSE}
+stats_table <- data.frame(mean_obs = as.numeric(ts_humm_cleaned)) %>%
+  summarise(
+    Mean = mean(mean_obs, na.rm = TRUE),
+    Median = median(mean_obs, na.rm = TRUE),
+    SD = sd(mean_obs, na.rm = TRUE),
+    Min = min(mean_obs, na.rm = TRUE),
+    Max = max(mean_obs, na.rm = TRUE),
+    `1st Quartile` = quantile(mean_obs, 0.25, na.rm = TRUE),
+    `3rd Quartile` = quantile(mean_obs, 0.75, na.rm = TRUE)
+  )
+
+kbl(stats_table,
+    caption = "Summary Statistics for Cleaned Monthly Hummingbird Observations",
+    digits = 2,
+    booktabs = TRUE) %>%
+  kable_styling(
+    latex_options = c("hold_position"),
+    full_width = FALSE,
+    position = "center"
+  )
+```
+
+To visualize the seasonal pattern, I plotted monthly distributions and decomposed the series (Figure X).
+
+```{r humm_explore, echo=FALSE, fig.height=4, fig.width=14, fig.cap="Monthly distributions and decomposition of Ruby-throated Hummingbird time series"}
+#boxplot by month
+humm_train <- humm_train %>%
+  mutate(month = factor(month(date), levels = 1:12))
+
+boxplot <- ggplot(humm_train, aes(x = month, y = mean_obs)) +
+  geom_boxplot(fill = "steelblue", alpha = 0.6) +
+  xlab("Month") +
+  ylab("Mean Daily Observations") +
+  ggtitle("Monthly Hummingbird Observations (2015-2024)") +
+  scale_x_discrete(labels = month.abb) +
+  theme_bw(base_size = 13)
+
+#decomposition
+humm_decomp <- decompose(ts_humm_cleaned, type = "additive")
+decomp_plot <- autoplot(humm_decomp) +
+  ggtitle("Decomposition of Cleaned Hummingbird Data") +
+  theme_bw(base_size = 13)
+
+plot_grid(boxplot, decomp_plot, ncol = 2)
+```
+
+The boxplot confirms the hummingbird's summer migrant status - observations peak in breeding season (May-August) and are basically zero in winter. The decomposition shows a strong seasonal component with consistent annual pattern and no obvious long-term trend.
+
+#### ACF and PACF
+
+I examined the ACF and PACF to help with model selection (Figure X).
+
+```{r humm_acf, echo=FALSE, fig.cap="ACF and PACF for the cleaned monthly Ruby-throated Hummingbird series"}
+acf_plot <- autoplot(Acf(ts_humm_cleaned, lag.max = 50, plot = FALSE)) +
+  ggtitle(" ") +
+  theme_bw(base_size = 13)
+
+pacf_plot <- autoplot(Pacf(ts_humm_cleaned, lag.max = 50, plot = FALSE)) +
+  ggtitle(" ") +
+  theme_bw(base_size = 13)
+
+plot_row <- plot_grid(acf_plot, pacf_plot, ncol = 2)
+
+title <- ggdraw() + 
+  draw_label("Cleaned Hummingbird Data: ACF and PACF",
+    x = 0, hjust = 0, vjust = 1) +
+  theme(plot.margin = margin(0, 0, 0, 0))
+
+plot_grid(title, plot_row, ncol = 1, rel_heights = c(0.09, 1))
+```
+
+The ACF shows strong seasonal autocorrelation with significant spikes at lags 12, 24, and 36, which makes sense for annual patterns. The gradual decay suggests the series is non-stationary. The PACF has significant spikes at lags 1 and 12, indicating potential autoregressive components at both seasonal and non-seasonal scales.
+
+I used ndiffs() and nsdiffs() to determine differencing needs - the functions suggested one non-seasonal difference and one seasonal difference. Based on the strong seasonality in the decomposition and ACF/PACF patterns, I chose to use SARIMA models which can handle seasonal data.
+
+#### Auto SARIMA
+
+I used auto.arima() to automatically select the best SARIMA model.
+
+```{r humm_sarima, echo=FALSE}
+sarima_fit <- auto.arima(ts_humm_cleaned)
+```
+
+The function selected an ARIMA(2,0,1)(1,1,0)[12] model with two autoregressive terms, one moving average term, and one seasonal autoregressive term with seasonal differencing. I checked the residuals to make sure they looked like white noise - the Ljung-Box test gave a p-value of 0.39, which means the residuals passed the test (no significant autocorrelation left over).
+
+```{r humm_forecast, echo=FALSE}
+sarima_forecast <- forecast(sarima_fit, h = 12)
+```
+
+#### Seasonal Naive
+
+For comparison, I also fit a seasonal naive model as a simple benchmark. This method just uses last year's observation for the same month as the forecast.
+
+```{r humm_naive, echo=FALSE}
+naive_forecast <- snaive(ts_humm_cleaned, h = 12)
+```
+
+The seasonal naive residuals showed significant autocorrelation, especially at seasonal lags, suggesting it's leaving patterns on the table that SARIMA should be able to capture.
+
+#### Comparison of Models
+
+I compared both models' forecasts against the actual 2025 observations (Figure X).
+
+```{r humm_compare, echo=FALSE, fig.cap="Forecast comparison for 2025 Ruby-throated Hummingbird observations"}
+ts_humm_test <- ts(humm_test_obs, start = c(2025, 1), frequency = 12)
+
+autoplot(ts_humm_test, series = "True Observations") +
+  autolayer(sarima_forecast, PI = FALSE, series = "Auto-SARIMA") +
+  autolayer(naive_forecast, PI = FALSE, series = "Seasonal Naive") +
+  xlab("Time") +
+  ylab("Mean Daily Observations") +
+  ggtitle("Forecast Comparison: Test Period (2025)") +
+  theme_bw(base_size = 13) +
+  xlim(2024, 2026) +
+  scale_x_continuous(breaks = seq(2024, 2026, by = 1)) +
+  theme(legend.position = c(0.15, 0.88),
+        legend.title = element_blank())
+```
+
+Both models capture the seasonal pattern of summer presence and winter absence. To quantify performance, I calculated error metrics (Table X).
+
+```{r humm_accuracy, echo=FALSE}
+sarima_scores <- accuracy(sarima_forecast$mean, humm_test_obs)
+naive_scores <- accuracy(naive_forecast$mean, humm_test_obs)
+
+scores <- as.data.frame(rbind(sarima_scores, naive_scores))
+row.names(scores) <- c("Auto-SARIMA", "Seasonal Naive")
+best_index <- which.min(scores[,"RMSE"])
+
+kbl(scores[, c("ME", "RMSE", "MAE", "MPE", "MAPE")],
+    caption = "Forecast Accuracy for Monthly Ruby-throated Hummingbird Observations",
+    digits = 2,
+    booktabs = TRUE) %>%
+  kable_styling(
+    latex_options = c("hold_position", "striped"),
+    full_width = FALSE,
+    position = "center",
+    stripe_index = best_index
+  )
+```
+
+The Auto-SARIMA model beat the Seasonal Naive benchmark on all the interpretable metrics. SARIMA got an RMSE of 2.06 vs 2.49 for Seasonal Naive - that's a 17% improvement. Note that MPE and MAPE have undefined values (NaN/Inf) for SARIMA because of division by zero when actual observations are zero in winter. Overall, SARIMA is the better model for hummingbird data and does a good job capturing the timing and magnitude of peak observations during breeding season.
+
 # Summary and Conclusions
 
 Im just brainstorming things to write about: 
