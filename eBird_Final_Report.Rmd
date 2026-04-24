@@ -1,9 +1,10 @@
 ---
-title: "Final_Report"
+title: "Modeling Changes in Bird Occurrence Across Residency Groups in Durham County (2015-2025)"
 output:
   html_document: default
   pdf_document: default
-date: "2026-04-20"
+author: Jonathan Gilman, Nicole Gutkowski, Shaochong Xue
+date: "2026-04-24"
 ---
 
 ```{r, include=FALSE}
@@ -37,27 +38,22 @@ These impacts are not uniform across species, as different residency groups (res
 This study uses Durham County, North Carolina as a case study to analyze long-term trends in bird occurrence across residency types using time series modeling. Three indicator species were selected to represent different residency strategies: Canada Goose (resident), Ruby-throated Hummingbird (summer migrant), and Yellow-rumped Warbler (winter migrant). These species were chosen based on their ecological relevance and the availability of consistent observational data.
 
 
-^^took this from the abstract submission/ added a little bit about our species
-- maybe include a little bit more about background - in the slides we talked about the decline of migrant bird populations? (60% since 1900)
-
-
 # Dataset information
 
 The data for this project are sourced from eBird, a global citizen science database from the Cornell Lab or Ornithology. While this study only analyzes data for three bird species in Durham, NC, the eBird dataset contains data for over 2000 species globally, making it comprehensive resource for ornithology efforts all over the world. 
 
-For the intial download of data from eBird, the data request was filtered to our indicator species in Durham, NC. From this, we recieved a dataset with 54246 recorded observations for our three species between February 20, 2002 to January 31, 2026. The dataset included information on species identification, observation details (counts, behavior, breeding), spatial location, time, observer metadata, survey effort, and data quality/validation information.
-
-^thinking we will get into cleaning etc later on in the analysis?
+For the intial download of data from eBird, the data request was filtered to our indicator species in Durham, NC. From this, we recieved a dataset with 54246 recorded observations for our three species between February 20, 2002 to January 31, 2026. The dataset included information on species identification, observation details (counts, behavior, breeding), spatial location, time, observer metadata, survey effort, and data quality/validation information.pr
 
 
-# Data Cleaning (general)
+# Data Cleaning (General)
 
-- chose to use between 2015 and 2015
-
+Prior to species-specific analysis, several general cleaning and preparation steps were applied to the full dataset. The raw eBird data was subset to retain only three variables of interest: species identification, observation counts, and date. Although the dataset contains records dating back to 2002, analysis was restricted to January 2015 through January 2026. Data prior to 2015 was highly inconsistent, which we attributed to irregular observer effort rather than true absences of birds, making it unsuitable for reliable time series modeling.
+Any dates with no recorded observations were filled with zeros, reflecting the assumption that the species was not detected on those days. Data were then aggregated to the monthly level by calculating the mean daily observation count within each month, resulting in a continuous monthly time series for each species with no gaps. Finally, each aggregated dataframe was formatted as a time series object to facilitate downstream modeling and forecasting.
+Species-specific outlier removal and additional cleaning steps are described within each species' analysis section below.
 
 # Analysis (Methods and Models)
 
-### Canada Goose + models / results
+### Canada Goose Models and Results
 
 For the time series analysis of Canada Goose observation data, I chose to use the monthly data for training and forecasting models. Prior to any modeling, general data exploration and further cleaning were performed. 
 
@@ -346,9 +342,7 @@ kbl(goose_scores,
 
 
 
-
-
-### Warbler + models / results
+### Warbler Models and Results
 
 The Yellow-rumped Warbler (YRWA) is a common winter migratory species in North Carolina. In this section, we analyze the temporal pattern of YRWA observations and develop time series models to forecast future trends.
 
@@ -1133,7 +1127,7 @@ The forecast accuracy results show that the SARIMA model performs best for the o
 The selected SARIMA model captures the strong seasonal pattern in the observer ratio series, and residual diagnostics indicate a good fit with no significant remaining autocorrelation. The final 12-month forecast shows a clear continuation of the annual cycle, with smoother and more stable patterns than those observed in the raw observation data. Although uncertainty increases over time, the seasonal structure remains consistent, indicating that future trends are likely to follow similar dynamics.
 
 
-### Ruby-throated Hummingbird + models / results
+### Ruby-throated Hummingbird Models and Results
 
 For the Ruby-throated Hummingbird analysis, I used monthly data from 2015-2025. The Ruby-throated Hummingbird is a summer migrant that breeds in Durham and migrates south for winter. Prior to modeling, I performed data exploration and cleaning.
 
@@ -1381,28 +1375,19 @@ than observer bias.
 
 # Summary and Conclusions
 
-Im just brainstorming things to write about: 
-did all of us have similar models that forecasted well? 
-- which models worked best for each species if not
+This project analyzed time series data from three bird species observed in Durham, NC — the Canada Goose, the Yellow-rumped Warbler (YRWA), and the Ruby-throated Hummingbird — spanning 2015 to 2025. For each species, we explored seasonal structure, fit multiple forecasting models, and evaluated out-of-sample performance. Several consistent findings emerged across all three analyses.
 
-Did the seasonal species models that worked work better?
-- would make sense if the resident species and migrant species had different best models ig
+All three species exhibited strong and consistent seasonal patterns, though the nature and timing of those patterns differed in ecologically meaningful ways. The Canada Goose, as a resident species, showed year-round observations with modest seasonal fluctuation. The Yellow-rumped Warbler, a winter migrant, displayed sharp peaks during its wintering months and near-zero counts in summer. The Ruby-throated Hummingbird showed the most pronounced seasonality of the three, with observations concentrated entirely in the summer breeding season (May–September) and essentially zero presence in winter months. These patterns were confirmed by decomposition, ACF/PACF plots, and seasonal boxplot distributions across all three species.
 
-Model performance for intial data vs observer normalized
-- I think im going to do like 3 models with the regular data and then like 3 with the observer normalized data/ compare the models that worked well for each/ did they change significantly
-
-
-# Summary and Conclusions
-
-We analyzed observation patterns for three bird species in Durham County from 2015-2025: Canada Goose (resident), Ruby-throated Hummingbird (summer migrant), and Yellow-rumped Warbler (winter migrant).
+Across all three species, SARIMA models consistently performed best or among the best in out-of-sample forecasting. The model's ability to account for both short-term autoregressive dependence and seasonal structure made it well-suited to these data. For the Canada Goose, Auto-SARIMA(1,1,1)(1,0,0)[12] outperformed the Basic Structural Model across RMSE, MAE, and MAPE metrics. For the YRWA, SARIMA achieved the lowest RMSE (12.60), MAE (9.81), and MASE (1.55) compared to ARIMA + Fourier and ETS models. For the Ruby-throated Hummingbird, while the seasonal naive benchmark matched performance on the 2025 test set due to the species' highly regular annual timing, the SARIMA model ARIMA(2,0,1)(1,1,0)[12] passed all residual diagnostics and produced a sound 12-month forward forecast.
 
 ## Model Performance
 
 Different models worked best for each species:
 
-**Canada Goose:** 
+**Canada Goose:** Auto-SARIMA(1,1,1)(1,0,0)[12] outperformed the Basic Structural Model across all error metrics, with an RMSE of 26.10 compared to 29.07 for the BSM. Both models captured the general seasonal shape but underestimated the magnitude of the seasonal dip in early 2025.
 
-**Yellow-rumped Warbler:** 
+**Yellow-rumped Warbler:** SARIMA ARIMA(1,0,0)(2,1,0)[12] performed best with RMSE 12.60, MAE 9.81, and MASE 1.55, outperforming both the ARIMA + Fourier and ETS models. All three models captured the timing of seasonal peaks and troughs but differed in their accuracy of magnitude.
 
 **Ruby-throated Hummingbird:** Seasonal naive got perfect accuracy (RMSE = 0.00) compared to SARIMA (RMSE = 0.15). The 2025 pattern was almost identical to 2024, which makes sense for a migrant species with consistent timing. SARIMA slightly overpredicted the peak, probably because it's averaging across all 10 years of training data.
 
@@ -1415,5 +1400,7 @@ We only analyzed observation counts for goose and hummingbird, but the consisten
 ## Main Takeaways
 
 All three species showed clear seasonal patterns that matched their life histories - year-round with variation (goose), summer only (hummingbird), winter only (warbler). Simple models worked well when patterns were stable year-to-year, while SARIMA was better for more variable species. The strong seasonal signals show that long-term eBird data is useful for tracking bird phenology despite the observer effort limitations.
+
+Overall, this project demonstrates that time series methods, particularly SARIMA, provide a practical and interpretable framework for modeling avian observation data. The strong seasonal patterns present in all three species make them well-suited to seasonal time series approaches, and the forecasting results suggest these methods can meaningfully capture the temporal dynamics of bird populations in the Durham region.
 
 
