@@ -637,4 +637,787 @@ autoplot(fc_ratio_final) +
   theme_bw(base_size = 13)
 ```
 
+### Warbler + models / results
+
+The Yellow-rumped Warbler (YRWA) is a common winter migratory species in North Carolina. In this section, we analyze the temporal pattern of YRWA observations and develop time series models to forecast future trends.
+
+We compare modeling results based on observation count and observer ratio. The observer ratio standardizes observation counts and helps control for variation in birding effort over time.
+
+```{r, , echo = FALSE, warning = FALSE}
+# Monthly Data
+YRWA_monthly <- read.csv("./Data/Cleaned_bySpecies/Warbler_Monthly.csv")
+YRWA_monthly_obs <- read.csv("./Data/Cleaned_bySpecies/Warbler_Monthly_withObserver.csv")
+
+# filter observation data from 2015-01-01 to 2025-12-31
+YRWA_monthly <- YRWA_monthly %>% 
+  mutate(
+    date = ymd(date),
+    month = month(date)
+  ) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-12-31"))
+
+YRWA_monthly_obs <- YRWA_monthly_obs %>% 
+  mutate(
+    date = ymd(date),
+    month = month(date)
+  ) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-12-31"))
+
+# convert to ts
+YRWA_obs_ts <- ts(
+  YRWA_monthly$mean_obs,
+  start = c(2015, 1),
+  frequency = 12
+)
+```
+
+
+```{r, echo = FALSE, warning = FALSE}
+# Monthly observer ratio
+# total observer
+bird_data <- read.csv("./Data/Raw/eBird_Species_Data.csv")
+
+# daily total observers
+daily_total_observers <- bird_data %>%
+  mutate(
+    OBSERVATION.DATE = as.Date(OBSERVATION.DATE),
+    date = OBSERVATION.DATE
+  ) %>%
+  filter(
+    date >= as.Date("2015-01-01") &
+    date <= as.Date("2025-12-31")
+  ) %>%
+  group_by(date) %>%
+  summarise(
+    total_observers = n_distinct(OBSERVER.ID),
+    .groups = "drop"
+  )
+
+# daily observer
+YRWA_daily_obs <- read.csv("./Data/Cleaned_bySpecies/Warbler_Daily_withObserver.csv")
+
+YRWA_daily_obs <- YRWA_daily_obs %>%
+  mutate(
+    date = ymd(date),
+    month = month(date)
+  ) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-12-31"))
+
+# daily ratio
+YRWA_daily_ratio <- daily_total_observers %>%
+  left_join(YRWA_daily_obs, by = "date") %>%
+  mutate(
+    sum_observers = ifelse(is.na(sum_observers), 0, sum_observers),
+    sum_obs = ifelse(is.na(sum_obs), 0, sum_obs),
+    observer_ratio = ifelse(total_observers == 0, 0, sum_observers / total_observers)
+  )
+
+# monthly ratio
+YRWA_monthly_ratio <- YRWA_daily_ratio %>%
+  mutate(date = floor_date(date, "month")) %>% 
+  group_by(date) %>%
+  summarise(
+    mean_obs = mean(sum_obs),
+    mean_observers = mean(sum_observers),
+    mean_observer_ratio = mean(observer_ratio),
+    .groups = "drop"
+  )
+
+# convert to monthly ts
+YRWA_ratio_ts <- ts(
+  YRWA_monthly_ratio$mean_observer_ratio,
+  start = c(2015, 1),
+  frequency = 12
+)
+```
+
+#### Summary Statistics
+
+```{r, echo = FALSE, warning = FALSE}
+obs_summary_table <- data.frame(
+  Dataset = "Observations",
+  Mean = mean(as.numeric(YRWA_obs_ts), na.rm = TRUE),
+  Median = median(as.numeric(YRWA_obs_ts), na.rm = TRUE),
+  SD = sd(as.numeric(YRWA_obs_ts), na.rm = TRUE),
+  Min = min(as.numeric(YRWA_obs_ts), na.rm = TRUE),
+  Max = max(as.numeric(YRWA_obs_ts), na.rm = TRUE),
+  `1st Quartile` = quantile(as.numeric(YRWA_obs_ts), 0.25, na.rm = TRUE),
+  `3rd Quartile` = quantile(as.numeric(YRWA_obs_ts), 0.75, na.rm = TRUE)
+)
+
+ratio_summary_table <- data.frame(
+  Dataset = "Observer Ratio",
+  Mean = mean(as.numeric(YRWA_ratio_ts), na.rm = TRUE),
+  Median = median(as.numeric(YRWA_ratio_ts), na.rm = TRUE),
+  SD = sd(as.numeric(YRWA_ratio_ts), na.rm = TRUE),
+  Min = min(as.numeric(YRWA_ratio_ts), na.rm = TRUE),
+  Max = max(as.numeric(YRWA_ratio_ts), na.rm = TRUE),
+  `1st Quartile` = quantile(as.numeric(YRWA_ratio_ts), 0.25, na.rm = TRUE),
+  `3rd Quartile` = quantile(as.numeric(YRWA_ratio_ts), 0.75, na.rm = TRUE)
+)
+
+combined_summary_table <- bind_rows(obs_summary_table, ratio_summary_table)
+
+kbl(
+  combined_summary_table,
+  caption = "Summary Statistics for Monthly YRWA Observations and Observer Ratio",
+  digits = 2,
+  booktabs = TRUE,
+  row.names = FALSE
+) %>%
+  kable_styling(
+    latex_options = c("hold_position"),
+    full_width = FALSE,
+    position = "center"
+  )
+```
+
+Summary statistics show clear differences between observation count and observer ratio. The mean monthly observation count is 15.80, with a relatively large standard deviation (15.27), indicating high variability across months. In contrast, the observer ratio has a lower mean (0.43) and smaller variability (SD = 0.36), suggesting a more stable relative measure after accounting for observer effort.
+
+Both variables include values close to zero, reflecting months with very low or no observations. The maximum observation count reaches 53.2, while the observer ratio peaks at 0.9, indicating periods of high detection relative to effort.
+
+```{r, echo = FALSE, warning = FALSE}
+p1 <- autoplot(YRWA_obs_ts) +
+  xlab(NULL) +
+  ylab("Mean Observations") +
+  ggtitle("Observations") +
+  theme_bw(base_size = 12)
+
+p2 <- autoplot(YRWA_ratio_ts) +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("Observer Ratio") +
+  theme_bw(base_size = 12)
+
+p1 / p2 +
+  plot_annotation(
+    title = "Monthly YRWA Observations and Observer Ratio (2015–2025)"
+  )
+```
+
+```{r, echo = FALSE, warning = FALSE}
+autoplot(YRWA_obs_ts, series = "Observations") +
+  autolayer(YRWA_ratio_ts * max(YRWA_obs_ts), 
+            series = "Observer Ratio (scaled)") +
+  xlab("Time") +
+  ylab("Value") +
+  ggtitle("Comparison: Observations vs Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+The time series plots reveal strong and consistent seasonal patterns in both observation count and observer ratio. Peaks occur regularly each year, while values drop close to zero during off-season months. 
+
+Although the observation count shows greater variability and more pronounced spikes, the observer ratio follows a very similar seasonal pattern, indicating that the temporal dynamics are not solely driven by changes in observer effort.
+
+When comparing observation count with the scaled observer ratio, the two series closely align in terms of timing and overall pattern. However, the observation count exhibits larger fluctuations, while the observer ratio appears smoother and more consistent. This highlights the advantage of the observer ratio in reducing the influence of varying sampling effort.
+
+```{r, echo = FALSE, warning = FALSE}
+#box plot
+
+obs_df <- YRWA_monthly %>%
+  select(month, value = mean_obs) %>%
+  mutate(type = "Observations")
+
+ratio_df <- YRWA_daily_ratio %>%
+  select(month, value = observer_ratio) %>%
+  mutate(type = "Observer Ratio")
+
+plot_df <- bind_rows(obs_df, ratio_df)
+
+plot_df$month <- factor(plot_df$month, levels = 1:12)
+
+# plot
+ggplot(plot_df, aes(x = month, y = value, fill = month)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  facet_wrap(~type, scales = "free_y") +
+  theme_bw(base_size = 13) +
+  scale_fill_manual(values = month_colors) +
+  scale_x_discrete(labels = month.abb) +
+  labs(
+    title = "Seasonal Patterns: Observations vs Observer Ratio",
+    x = "Month",
+    y = NULL
+  ) +
+  theme(
+    legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
+The seasonal boxplots further confirm strong monthly patterns. Observations are highest during April, corresponding to peak migration periods. In contrast, values drop to near zero during summer months (June to August), when the species is largely absent from the region.
+
+The observer ratio shows a nearly identical seasonal structure, with high values concentrated in winter months and minimal activity in summer. This consistency suggests that the observed seasonal pattern reflects true biological behavior rather than sampling bias.
+
+Additionally, variability is highest during peak months, indicating that observation intensity can vary substantially across years during migration periods.
+
+```{r,  echo = FALSE, warning = FALSE}
+# STL
+YRWA_obs_stl <- stl(YRWA_obs_ts, s.window = "periodic")
+YRWA_ratio_stl <- stl(YRWA_ratio_ts, s.window = "periodic")
+
+# plots
+p_obs <- autoplot(YRWA_obs_stl) +
+  ggtitle("Observations") +
+  theme_bw(base_size = 11)
+
+p_ratio <- autoplot(YRWA_ratio_stl) +
+  ggtitle("Observer Ratio") +
+  theme_bw(base_size = 11)
+
+# combine
+(p_obs / p_ratio) +
+  plot_annotation(
+    title = "STL Decomposition: YRWA Observations vs Observer Ratio"
+  ) +
+  plot_layout(heights = c(1, 1.2))
+```
+
+
+#### ACF and PACF
+
+```{r, echo = FALSE, warning = FALSE}
+# Observation ACF
+a <- autoplot(
+  Acf(YRWA_obs_ts, lag.max = 50, plot = FALSE)
+) +
+  ggtitle("") +
+  theme_bw(base_size = 13)
+
+# Observation PACF
+b <- autoplot(
+  Pacf(YRWA_obs_ts, lag.max = 50, plot = FALSE)
+) +
+  ggtitle("") +
+  theme_bw(base_size = 13)
+
+# combine row
+plot_row <- plot_grid(a, b, ncol = 2)
+
+# title
+title <- ggdraw() +
+  draw_label(
+    "YRWA Observations: ACF and PACF",
+    x = 0,
+    hjust = 0,
+    vjust = 1
+  ) +
+  theme(
+    plot.margin = margin(0, 0, 0, 0)
+  )
+
+plot_grid(
+  title, plot_row,
+  ncol = 1,
+  rel_heights = c(0.08, 1)
+)
+```
+
+```{r, echo = FALSE, warning = FALSE}
+# ratio ACF
+c <- autoplot(
+  Acf(YRWA_ratio_ts, lag.max = 50, plot = FALSE)
+) +
+  ggtitle("") +
+  theme_bw(base_size = 13)
+
+# ratio PACF
+d <- autoplot(
+  Pacf(YRWA_ratio_ts, lag.max = 50, plot = FALSE)
+) +
+  ggtitle("") +
+  theme_bw(base_size = 13)
+
+# combine row
+plot_ratio_row <- plot_grid(c, d, ncol = 2)
+
+# title
+title <- ggdraw() +
+  draw_label(
+    "YRWA Observer Ratio: ACF and PACF",
+    x = 0,
+    hjust = 0,
+    vjust = 1
+  ) +
+  theme(
+    plot.margin = margin(0, 0, 0, 0)
+  )
+
+plot_grid(
+  title, plot_ratio_row,
+  ncol = 1,
+  rel_heights = c(0.08, 1)
+)
+```
+
+The ACF plots for both observation count and observer ratio show strong and repeated spikes at seasonal lags (e.g., 12, 24, and 36 months), indicating clear annual seasonality in the data. In both cases, autocorrelation decays slowly, suggesting persistent temporal structure rather than random variation.
+
+The PACF plots for both series show a strong spike at lag 1, along with weaker signals at seasonal lags. This indicates the presence of short-term dependence as well as seasonal effects.
+
+Overall, both observation count and observer ratio exhibit similar autocorrelation structures, suggesting that the seasonal pattern is robust and not driven solely by variation in observer effort. These results support the use of seasonal time series models such as SARIMA.
+
+#### YRWA Observation Time Series Modeling and Forecasting
+
+We fit three time series models to the monthly YRWA observation series: a seasonal ARIMA (SARIMA) model, an ARIMA model with Fourier terms, and an exponential smoothing (ETS) model. The SARIMA model captures both short-term dependence and seasonal structure, while the ARIMA + Fourier model provides a flexible way to model smooth seasonal patterns. The ETS model serves as a benchmark based on error, trend, and seasonal components.
+
+To evaluate model performance, we split the time series into a training set (ending in December 2024) and a test set (starting in January 2025). Each model was fitted on the training data and used to generate forecasts for the test period. Model adequacy was assessed using residual diagnostics, and forecasting performance on test set.
+
+```{r, echo = FALSE, warning = FALSE}
+# fit modle on full dataset
+# SARIMA
+fit_obs_sarima <- auto.arima(
+  YRWA_obs_ts,
+  seasonal = TRUE
+)
+
+# ARIMA + Fourier
+fit_obs_fourier <- auto.arima(
+  YRWA_obs_ts,
+  seasonal = FALSE,
+  xreg = fourier(YRWA_obs_ts, K = 2)
+)
+
+# ETS
+fit_obs_ets <- ets(YRWA_obs_ts)
+
+# Store models in a list for cleaner workflow
+obs_models_full <- list(
+  SARIMA = fit_obs_sarima,
+  `ARIMA + Fourier` = fit_obs_fourier,
+  ETS = fit_obs_ets
+)
+```
+
+```{r, include = FALSE, warning = FALSE}
+checkresiduals(fit_obs_sarima)
+checkresiduals(fit_obs_fourier)
+checkresiduals(fit_obs_ets)
+```
+
+```{r, echo = FALSE, warning = FALSE}
+# train test split
+obs_train_ts <- window(YRWA_obs_ts, end = c(2024, 12))
+obs_test_ts  <- window(YRWA_obs_ts, start = c(2025, 1))
+
+h <- length(obs_test_ts)
+```
+
+```{r, echo = FALSE, warning = FALSE}
+# fit model on training dataset
+fit_obs_sarima_train <- auto.arima(
+  obs_train_ts,
+  seasonal = TRUE
+)
+
+fit_obs_fourier_train <- auto.arima(
+  obs_train_ts,
+  seasonal = FALSE,
+  xreg = fourier(obs_train_ts, K = 2)
+)
+
+fit_obs_ets_train <- ets(obs_train_ts)
+
+obs_models_train <- list(
+  SARIMA = fit_obs_sarima_train,
+  `ARIMA + Fourier` = fit_obs_fourier_train,
+  ETS = fit_obs_ets_train
+)
+```
+
+```{r, echo = FALSE, warning = FALSE}
+# test set forecasting
+fc_obs_sarima <- forecast(
+  fit_obs_sarima_train,
+  h = h
+)
+
+fc_obs_fourier <- forecast(
+  fit_obs_fourier_train,
+  xreg = fourier(obs_train_ts, K = 2, h = h)
+)
+
+fc_obs_ets <- forecast(
+  fit_obs_ets_train,
+  h = h
+)
+
+obs_forecasts <- list(
+  SARIMA = fc_obs_sarima,
+  `ARIMA + Fourier` = fc_obs_fourier,
+  ETS = fc_obs_ets
+)
+```
+
+```{r, echo = FALSE, warning = FALSE}
+plot_obs_forecast <- function(fc_obj, actual_ts, title_text) {
+  autoplot(fc_obj, include = 36) + 
+    autolayer(actual_ts, series = "Actual", linewidth = 0.9) +
+    xlab("Time") +
+    ylab("Mean Observations") +
+    ggtitle(title_text) +
+    theme_bw(base_size = 13) +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      panel.grid.minor = element_blank()
+    )
+}
+
+p_sarima <- plot_obs_forecast(
+  fc_obs_sarima,
+  obs_test_ts,
+  "SARIMA"
+)
+
+p_fourier <- plot_obs_forecast(
+  fc_obs_fourier,
+  obs_test_ts,
+  "ARIMA + Fourier"
+)
+
+p_ets <- plot_obs_forecast(
+  fc_obs_ets,
+  obs_test_ts,
+  "ETS"
+)
+
+options(repr.plot.width = 14, repr.plot.height = 4)
+
+p_sarima + p_fourier + p_ets +
+  plot_layout(guides = "collect") +
+  plot_annotation(
+    title = "Forecast Comparison: YRWA Observations"
+  ) &
+  theme(legend.position = "bottom")
+```
+
+```{r, echo = FALSE, warning = FALSE}
+obs_plot_df <- data.frame(
+  Time = time(obs_test_ts),
+  Actual = as.numeric(obs_test_ts),
+  SARIMA = as.numeric(fc_obs_sarima$mean),
+  ARIMA_Fourier = as.numeric(fc_obs_fourier$mean),
+  ETS = as.numeric(fc_obs_ets$mean)
+) %>%
+  pivot_longer(
+    cols = c("SARIMA", "ARIMA_Fourier", "ETS"),
+    names_to = "Model",
+    values_to = "Forecast"
+  )
+
+ggplot(obs_plot_df, aes(x = Time)) +
+  geom_line(aes(y = Actual), linewidth = 1.1, color = "black") +
+  geom_line(aes(y = Forecast, color = Model), linewidth = 1) +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Observed vs Forecasted YRWA Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
+
+The forecast results show that all three models capture the strong seasonal pattern in YRWA observations, with similar timing of peaks and troughs. However, their accuracy differs in detail. The SARIMA model aligns most closely with the observed values across the test period, particularly in capturing both the magnitude and timing of seasonal peaks. In comparison, the ARIMA + Fourier model tends to produce more extreme fluctuations and shows larger deviations from the observed series, while the ETS model provides a smoother fit but slightly underestimates peak values. Overall, SARIMA provides the most balanced and accurate representation of the observed data.
+
+```{r, echo = FALSE, warning = FALSE}
+obs_sarima_acc  <- accuracy(fc_obs_sarima,  obs_test_ts)[2, c("RMSE", "MAE", "MAPE", "MASE")]
+obs_fourier_acc <- accuracy(fc_obs_fourier, obs_test_ts)[2, c("RMSE", "MAE", "MAPE", "MASE")]
+obs_ets_acc     <- accuracy(fc_obs_ets,     obs_test_ts)[2, c("RMSE", "MAE", "MAPE", "MASE")]
+
+obs_acc_df <- data.frame(
+  Model = c("SARIMA", "ARIMA + Fourier", "ETS"),
+  RMSE  = c(as.numeric(obs_sarima_acc["RMSE"]),
+            as.numeric(obs_fourier_acc["RMSE"]),
+            as.numeric(obs_ets_acc["RMSE"])),
+  MAE   = c(as.numeric(obs_sarima_acc["MAE"]),
+            as.numeric(obs_fourier_acc["MAE"]),
+            as.numeric(obs_ets_acc["MAE"])),
+  MAPE  = c(as.numeric(obs_sarima_acc["MAPE"]),
+            as.numeric(obs_fourier_acc["MAPE"]),
+            as.numeric(obs_ets_acc["MAPE"])),
+  MASE  = c(as.numeric(obs_sarima_acc["MASE"]),
+            as.numeric(obs_fourier_acc["MASE"]),
+            as.numeric(obs_ets_acc["MASE"]))
+)
+
+obs_acc_df <- obs_acc_df %>%
+  mutate(across(c(RMSE, MAE, MAPE, MASE), ~ round(.x, 3)))
+
+knitr::kable(
+  obs_acc_df,
+  caption = "Forecast Accuracy for YRWA Observation Models",
+  digits = 3
+) %>%
+  kableExtra::kable_styling(full_width = FALSE)
+```
+
+```{r, include = FALSE, warning = FALSE}
+best_obs_model <- obs_acc_df$Model[which.min(obs_acc_df$RMSE)]
+best_obs_model
+```
+
+The forecast accuracy results show that the SARIMA model performs best among the three models, with the lowest RMSE (12.604), MAE (9.807), and MASE (1.550). In comparison, the ARIMA + Fourier and ETS models both have higher error values, indicating weaker out-of-sample performance. Although MAPE is infinite for all models due to zero values in the test set, the relative ranking based on other metrics clearly favors the SARIMA model.
+
+```{r, echo = FALSE, warning = FALSE}
+fit_obs_final <- auto.arima(
+  YRWA_obs_ts,
+  seasonal = TRUE
+)
+
+summary(fit_obs_final)
+checkresiduals(fit_obs_final)
+
+fc_obs_final <- forecast(
+  fit_obs_final,
+  h = 12
+)
+
+autoplot(fc_obs_final) +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Final 12-Month Forecast: YRWA Monthly Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank()
+  )
+```
+The selected SARIMA model (ARIMA(1,0,0)(2,1,0)[12]) captures both short-term dependence and strong seasonal structure in the data. Residual diagnostics indicate that the model adequately accounts for temporal patterns, as the residuals fluctuate around zero and show no clear systematic structure. The ACF of residuals does not display significant autocorrelation, and the Ljung–Box test (p-value = 0.8967) suggests that the residuals are not significantly different from white noise. This indicates that the model provides a good fit to the observed time series.
+
+The final 12-month forecast based on the SARIMA model shows a continuation of the strong seasonal pattern observed in the historical data. Predicted values rise and fall in a regular annual cycle, reflecting the migration-driven dynamics of YRWA observations. The prediction intervals widen over time, indicating increasing uncertainty in longer-term forecasts, but the overall seasonal structure remains stable. This suggests that future observations are expected to follow similar seasonal patterns as in previous years.
+
+#### YRWA Observer Ratio Time Series Modeling and Forecasting
+
+We applied a similar modeling framework to the YRWA observer ratio time series as used for the observation data. Specifically, we fitted SARIMA, ARIMA with Fourier terms, and ETS models, and evaluated their performance using a train–test split and forecasting.
+
+```{r, echo=FALSE, warning=FALSE}
+# fit model on full dataset
+# SARIMA
+fit_ratio_sarima <- auto.arima(
+  YRWA_ratio_ts,
+  seasonal = TRUE
+)
+
+# ARIMA + Fourier
+fit_ratio_fourier <- auto.arima(
+  YRWA_ratio_ts,
+  seasonal = FALSE,
+  xreg = fourier(YRWA_ratio_ts, K = 2)
+)
+
+# ETS
+fit_ratio_ets <- ets(YRWA_ratio_ts)
+
+# Store models in a list for cleaner workflow
+ratio_models_full <- list(
+  SARIMA = fit_ratio_sarima,
+  `ARIMA + Fourier` = fit_ratio_fourier,
+  ETS = fit_ratio_ets
+)
+```
+
+```{r, include=FALSE, warning=FALSE}
+checkresiduals(fit_ratio_sarima)
+checkresiduals(fit_ratio_fourier)
+checkresiduals(fit_ratio_ets)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+# train test split
+ratio_train_ts <- window(YRWA_ratio_ts, end = c(2024, 12))
+ratio_test_ts  <- window(YRWA_ratio_ts, start = c(2025, 1))
+
+h_ratio <- length(ratio_test_ts)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+# fit model on training dataset
+fit_ratio_sarima_train <- auto.arima(
+  ratio_train_ts,
+  seasonal = TRUE
+)
+
+fit_ratio_fourier_train <- auto.arima(
+  ratio_train_ts,
+  seasonal = FALSE,
+  xreg = fourier(ratio_train_ts, K = 2)
+)
+
+fit_ratio_ets_train <- ets(ratio_train_ts)
+
+ratio_models_train <- list(
+  SARIMA = fit_ratio_sarima_train,
+  `ARIMA + Fourier` = fit_ratio_fourier_train,
+  ETS = fit_ratio_ets_train
+)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+# test set forecasting
+fc_ratio_sarima <- forecast(
+  fit_ratio_sarima_train,
+  h = h_ratio
+)
+
+fc_ratio_fourier <- forecast(
+  fit_ratio_fourier_train,
+  xreg = fourier(ratio_train_ts, K = 2, h = h_ratio)
+)
+
+fc_ratio_ets <- forecast(
+  fit_ratio_ets_train,
+  h = h_ratio
+)
+
+ratio_forecasts <- list(
+  SARIMA = fc_ratio_sarima,
+  `ARIMA + Fourier` = fc_ratio_fourier,
+  ETS = fc_ratio_ets
+)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+plot_ratio_forecast <- function(fc_obj, actual_ts, title_text) {
+  autoplot(fc_obj, include = 36) +
+    autolayer(actual_ts, series = "Actual", linewidth = 0.9) +
+    xlab("Time") +
+    ylab("Observer Ratio") +
+    ggtitle(title_text) +
+    theme_bw(base_size = 13) +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      panel.grid.minor = element_blank()
+    )
+}
+
+p_ratio_sarima <- plot_ratio_forecast(
+  fc_ratio_sarima,
+  ratio_test_ts,
+  "SARIMA"
+)
+
+p_ratio_fourier <- plot_ratio_forecast(
+  fc_ratio_fourier,
+  ratio_test_ts,
+  "ARIMA + Fourier"
+)
+
+p_ratio_ets <- plot_ratio_forecast(
+  fc_ratio_ets,
+  ratio_test_ts,
+  "ETS"
+)
+
+options(repr.plot.width = 14, repr.plot.height = 4)
+
+p_ratio_sarima + p_ratio_fourier + p_ratio_ets +
+  plot_layout(guides = "collect") +
+  plot_annotation(
+    title = "Forecast Comparison: YRWA Observer Ratio"
+  ) &
+  theme(legend.position = "bottom")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+ratio_plot_df <- data.frame(
+  Time = time(ratio_test_ts),
+  Actual = as.numeric(ratio_test_ts),
+  SARIMA = as.numeric(fc_ratio_sarima$mean),
+  ARIMA_Fourier = as.numeric(fc_ratio_fourier$mean),
+  ETS = as.numeric(fc_ratio_ets$mean)
+) %>%
+  pivot_longer(
+    cols = c("SARIMA", "ARIMA_Fourier", "ETS"),
+    names_to = "Model",
+    values_to = "Forecast"
+  )
+
+ggplot(ratio_plot_df, aes(x = Time)) +
+  geom_line(aes(y = Actual), linewidth = 1.1, color = "black") +
+  geom_line(aes(y = Forecast, color = Model), linewidth = 1) +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("Observed vs Forecasted YRWA Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
+
+The forecast results for the observer ratio show that all three models capture the strong seasonal pattern, with similar timing of peaks and troughs. Compared to the observation count, the forecasts appear more stable and consistent across models, reflecting the effect of standardizing for observer effort. Among the models, SARIMA and ETS align more closely with the observed values, while the ARIMA + Fourier model shows slightly larger deviations, particularly during low-value periods. Overall, the differences between models are smaller than in the observation-based results, suggesting that the observer ratio provides a smoother and more stable signal for forecasting.
+
+```{r, echo=FALSE, warning=FALSE}
+ratio_sarima_acc  <- accuracy(fc_ratio_sarima,  ratio_test_ts)[2, c("RMSE", "MAE", "MAPE", "MASE")]
+ratio_fourier_acc <- accuracy(fc_ratio_fourier, ratio_test_ts)[2, c("RMSE", "MAE", "MAPE", "MASE")]
+ratio_ets_acc     <- accuracy(fc_ratio_ets,     ratio_test_ts)[2, c("RMSE", "MAE", "MAPE", "MASE")]
+
+ratio_acc_df <- data.frame(
+  Model = c("SARIMA", "ARIMA + Fourier", "ETS"),
+  RMSE  = c(as.numeric(ratio_sarima_acc["RMSE"]),
+            as.numeric(ratio_fourier_acc["RMSE"]),
+            as.numeric(ratio_ets_acc["RMSE"])),
+  MAE   = c(as.numeric(ratio_sarima_acc["MAE"]),
+            as.numeric(ratio_fourier_acc["MAE"]),
+            as.numeric(ratio_ets_acc["MAE"])),
+  MAPE  = c(as.numeric(ratio_sarima_acc["MAPE"]),
+            as.numeric(ratio_fourier_acc["MAPE"]),
+            as.numeric(ratio_ets_acc["MAPE"])),
+  MASE  = c(as.numeric(ratio_sarima_acc["MASE"]),
+            as.numeric(ratio_fourier_acc["MASE"]),
+            as.numeric(ratio_ets_acc["MASE"]))
+)
+
+ratio_acc_df <- ratio_acc_df %>%
+  mutate(across(c(RMSE, MAE, MAPE, MASE), ~ round(.x, 3)))
+
+knitr::kable(
+  ratio_acc_df,
+  caption = "Forecast Accuracy for YRWA Observer Ratio Models",
+  digits = 3
+) %>%
+  kableExtra::kable_styling(full_width = FALSE)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+best_ratio_model <- ratio_acc_df$Model[which.min(ratio_acc_df$RMSE)]
+
+fit_ratio_final <- auto.arima(
+  YRWA_ratio_ts,
+  seasonal = TRUE
+)
+
+summary(fit_ratio_final)
+checkresiduals(fit_ratio_final)
+
+fc_ratio_final <- forecast(
+  fit_ratio_final,
+  h = 12
+)
+
+autoplot(fc_ratio_final) +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("Final 12-Month Forecast: YRWA Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank()
+  )
+```
+
+The forecast accuracy results show that the SARIMA model performs best for the observer ratio series, with the lowest RMSE, MAE, and MASE. This result is consistent with the findings for the observation data. The ETS model performs slightly worse but remains comparable, while the ARIMA + Fourier model shows larger errors. 
+
+The selected SARIMA model captures the strong seasonal pattern in the observer ratio series, and residual diagnostics indicate a good fit with no significant remaining autocorrelation. The final 12-month forecast shows a clear continuation of the annual cycle, with smoother and more stable patterns than those observed in the raw observation data. Although uncertainty increases over time, the seasonal structure remains consistent, indicating that future trends are likely to follow similar dynamics.
 
