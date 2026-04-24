@@ -21,7 +21,7 @@
 # RStudio files
 .Rproj.user/
 
-# produced vignettes
+#produced vignettes
 vignettes/*.html
 vignettes/*.pdf
 
@@ -47,3 +47,12 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# R Markdown outputs
+*.html
+*.tex
+*.log
+*.aux
+*.out
+*.toc
+*.synctex.gz
