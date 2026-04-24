@@ -1,12 +1,11 @@
----
-title: "Final_Report"
-output:
-  html_document: default
-  pdf_document: default
-date: "2026-04-20"
----
+# YRWA Time Series Modeling & Forecasting
 
-```{r, include=FALSE}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
 
 library(forecast)
 library(Kendall)
@@ -21,134 +20,177 @@ library(smooth)
 library(zoo)
 library(kableExtra)
 library(tidyr)
-library(RColorBrewer)
-library(knitr)
-library(patchwork)
 
 ```
 
+### Yellow-rumped warbler + models / results
 
-# Introduction, Motivation, Relevance, Objectives
+#### Monthly Observation
 
-Anthropogenic environmental change has significantly altered bird diversity and population dynamics, with particularly strong declines observed among migratory species. Long-term studies estimate that North American bird populations have declined by nearly 60% since 1970, underscoring the importance of understanding species-specific trends over time.
+```{r}
+# Monthly Data
+YRWA_monthly <- read.csv("./Data/Cleaned_bySpecies/Warbler_Monthly.csv")
+YRWA_monthly_obs <- read.csv("./Data/Cleaned_bySpecies/Warbler_Monthly_withObserver.csv")
 
-These impacts are not uniform across species, as different residency groups (resident, summer migrant, winter migrant) respond differently to environmental pressures. Seasonal variation in occurrence may differ substantially between these groups, making time series approaches especially valuable for capturing both long-term trends and periodic fluctuations.
+head(YRWA_monthly)
+head(YRWA_monthly_obs)
+```
 
-This study uses Durham County, North Carolina as a case study to analyze long-term trends in bird occurrence across residency types using time series modeling. Three indicator species were selected to represent different residency strategies: Canada Goose (resident), Ruby-throated Hummingbird (summer migrant), and Yellow-rumped Warbler (winter migrant). These species were chosen based on their ecological relevance and the availability of consistent observational data.
-
-
-^^took this from the abstract submission/ added a little bit about our species
-- maybe include a little bit more about background - in the slides we talked about the decline of migrant bird populations? (60% since 1900)
-
-
-# Dataset information
-
-The data for this project are sourced from eBird, a global citizen science database from the Cornell Lab or Ornithology. While this study only analyzes data for three bird species in Durham, NC, the eBird dataset contains data for over 2000 species globally, making it comprehensive resource for ornithology efforts all over the world. 
-
-For the intial download of data from eBird, the data request was filtered to our indicator species in Durham, NC. From this, we recieved a dataset with 54246 recorded observations for our three species between February 20, 2002 to January 31, 2026. The dataset included information on species identification, observation details (counts, behavior, breeding), spatial location, time, observer metadata, survey effort, and data quality/validation information.
-
-^thinking we will get into cleaning etc later on in the analysis?
-
-
-# Data Cleaning (general)
-
-- chose to use between 2015 and 2015
-
-
-# Analysis (Methods and Models)
-
-### Canada Goose + models / results
-
-For the time series analysis of Canada Goose observation data, I chose to use the monthly data for training and forecasting models. Prior to any modeling, general data exploration and further cleaning were performed. 
-
-After intitial plotting of the time series, outlier removal was performed using tsclean() (Figure X).
-
-```{r, include = FALSE, warning= FALSE}
-
-goose_monthly <- read_csv("./Data/Cleaned_bySpecies/CanGoose_Monthly_withObserver.csv")
-
-goose_monthly <- goose_monthly %>% 
-  mutate(month = month(ymd(date))) %>% 
+```{r}
+# filter observation from 2015-1-1 to 2025-12-31
+# filter observation from 2015-01-01 to 2025-12-31
+YRWA_monthly <- YRWA_monthly %>% 
+  mutate(
+    date = ymd(date),
+    month = month(date)
+  ) %>% 
   filter(date >= as.Date("2015-01-01") &
-         date <= as.Date("2025-01-01"))
+         date <= as.Date("2025-12-31"))
+
+YRWA_monthly_obs <- YRWA_monthly_obs %>% 
+  mutate(
+    date = ymd(date),
+    month = month(date)
+  ) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-12-31"))
 
 
+str(YRWA_monthly)
+head(YRWA_monthly)
+
+str(YRWA_monthly_obs)
+head(YRWA_monthly_obs)
 ```
 
 
-```{r, echo = FALSE, warning = FALSE, message= FALSE, fig.width=12, fig.height=5, fig.cap= "Initial time series plot and cleaning of the monthly Canada Goose Observations Data"}
-
-ts_goose_monthly <- ts(goose_monthly$mean_obs, start = c(2015, 1), frequency = 12)
-
-ts_plot_goose <- autoplot(ts_goose_monthly)+
-  xlab("Time")+
-  ylab("Average Observations (Birds)")+
-  ggtitle("Monthly Canada Goose Data")+
-  theme_bw(base_size= 13)+
-  xlim(2015, 2025)+
-  scale_x_continuous(breaks = seq(2015, 2025, by = 1))
-
-ts_goose_cleaned <- tsclean(ts_goose_monthly)
-
-goose_train <- ts_goose_cleaned[1:109]
-ts_goose_train <- ts(goose_train, start = c(2015, 1), frequency = 12)
-
-goose_test <- ts_goose_cleaned[110:121]
-ts_goose_test <- ts(goose_test, start = c(2024, 2), frequency = 12)
-
-
-ts_goose_plot_cleaned <- autoplot(ts_goose_monthly, series = "Original Data") +
-  autolayer(ts_goose_cleaned, series = "Cleaned Data") +
-  xlab("Time") +
-  ylab("Average Observations (Birds)") +
-  ggtitle("Outlier Removal: Monthly Canada Goose Data") +
-  theme_bw(base_size = 13) +
-  theme(
-    legend.position = c(0.02, 0.98),  
-    legend.justification = c(0, 1),    
-    legend.title = element_blank())
-
-plot_grid(ts_plot_goose, ts_goose_plot_cleaned, ncol = 2)
-
-```
-
-After removing outliers from the data, summary statistics were also assessed (Table X). The wide range in monthly observations and large standard deviation relative to the mean indicated that while a resident species, observations may vary over the course of the year. 
-
-
-
-```{r, echo=FALSE, warning=FALSE}
-
-goose_clean_df <- data.frame(
-  date = as.Date(time(ts_goose_cleaned)),
-  mean_obs = as.numeric(ts_goose_cleaned)
+```{r}
+# convert to ts
+YRWA_obs_ts <- ts(
+  YRWA_monthly$mean_obs,
+  start = c(2015, 1),
+  frequency = 12
 )
 
-summary_table <- goose_clean_df %>%
-  summarise(
-    Mean = mean(mean_obs, na.rm = TRUE),
-    Median = median(mean_obs, na.rm = TRUE),
-    SD = sd(mean_obs, na.rm = TRUE),
-    Min = min(mean_obs, na.rm = TRUE),
-    Max = max(mean_obs, na.rm = TRUE),
-    `1st Quartile` = quantile(mean_obs, 0.25, na.rm = TRUE),
-    `3rd Quartile` = quantile(mean_obs, 0.75, na.rm = TRUE)
-  )
+# plot
+autoplot(YRWA_obs_ts) +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Monthly YRWA Observations (2015–2025)") +
+  theme_bw(base_size = 13)
+```
 
-kbl(summary_table,
-    caption = "Summary Statistics for Cleaned Monthly Goose Observations",
-    digits = 2,
-    booktabs = TRUE) %>%
-  kable_styling(
-    latex_options = c("hold_position"),
-    full_width = FALSE,
-    position = "center"
+```{r}
+YRWA_obs_ts_cleaned <- tsclean(YRWA_obs_ts)
+
+autoplot(YRWA_obs_ts, series = "Original Data") +
+  autolayer(YRWA_obs_ts_cleaned, series = "Cleaned Data") +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Outlier Removal: Monthly YRWA Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
   )
 ```
 
-To begin investigating potential seasonality or variations in observations throughout the year, the distribution of monthly observations were plotted and the series was decomposed into seasonal, trend, and residual components (Figure X).
+
+```{r}
+YRWA_obs_stl <- stl(YRWA_obs_ts, s.window = "periodic")
+
+autoplot(YRWA_obs_stl)
+```
+
+#### Monthly Observer Ratio
+
+```{r}
+bird_data <- read.csv("./Data/Raw/eBird_Species_Data.csv")
+```
+
+```{r}
+# daily total observers
+daily_total_observers <- bird_data %>%
+  mutate(
+    OBSERVATION.DATE = as.Date(OBSERVATION.DATE),
+    date = OBSERVATION.DATE
+  ) %>%
+  filter(
+    date >= as.Date("2015-01-01") &
+    date <= as.Date("2025-12-31")
+  ) %>%
+  group_by(date) %>%
+  summarise(
+    total_observers = n_distinct(OBSERVER.ID),
+    .groups = "drop"
+  )
+
+head(daily_total_observers)
+```
+
+```{r}
+# daily observer
+YRWA_daily_obs <- read.csv("./Data/Cleaned_bySpecies/Warbler_Daily_withObserver.csv")
+
+YRWA_daily_obs <- YRWA_daily_obs %>%
+  mutate(
+    date = ymd(date),
+    month = month(date)
+  ) %>% 
+  filter(date >= as.Date("2015-01-01") &
+         date <= as.Date("2025-12-31"))
+
+head(YRWA_daily_obs)
+```
+
+```{r}
+# daily ratio
+YRWA_daily_ratio <- daily_total_observers %>%
+  left_join(YRWA_daily_obs, by = "date") %>%
+  mutate(
+    sum_observers = ifelse(is.na(sum_observers), 0, sum_observers),
+    sum_obs = ifelse(is.na(sum_obs), 0, sum_obs),
+    observer_ratio = ifelse(total_observers == 0, 0, sum_observers / total_observers)
+  )
+
+head(YRWA_daily_ratio)
+```
+
+```{r}
+# monthly ratio
+YRWA_monthly_ratio <- YRWA_daily_ratio %>%
+  mutate(date = floor_date(date, "month")) %>% 
+  group_by(date) %>%
+  summarise(
+    mean_obs = mean(sum_obs),
+    mean_observers = mean(sum_observers),
+    mean_observer_ratio = mean(observer_ratio),
+    .groups = "drop"
+  )
+
+head(YRWA_monthly_ratio)
+```
 
 
-```{r, echo = FALSE, warning = FALSE,  fig.height=4, fig.width=14, fig.cap = "Distribution of Monthly Observations of Canada Geese"}
+```{r}
+# convert to monthly ts
+YRWA_ratio_ts <- ts(
+  YRWA_monthly_ratio$mean_observer_ratio,
+  start = c(2015, 1),
+  frequency = 12
+)
+
+# plot
+autoplot(YRWA_ratio_ts) +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Monthly YRWA Observer Ratio (2015–2025)") +
+  theme_bw(base_size = 13)
+```
+#### Data Visualization & Comparison
+
+```{r}
 month_colors <- c(
   "1" = "#4575b4",  # Jan - cold blue
   "2" = "#74add1",
@@ -164,182 +206,249 @@ month_colors <- c(
   "12" = "#4575b4"  # Dec - cold again
 )
 
-goose_monthly$month <- factor(goose_monthly$month, levels = 1:12)
+obs_df <- YRWA_monthly %>%
+  select(month, value = mean_obs) %>%
+  mutate(type = "Observations")
 
-goose_monthly_dist <- ggplot(goose_monthly, aes(x = month, y = mean_obs, fill = month))+
-  geom_boxplot()+
-  ylim(0, 200)+
-  theme_bw(base_size= 13)+
-  scale_fill_manual(values = month_colors)+
-  ggtitle("Monthly Canada Goose Observations in Durham (2015-2025)")+
-  ylab("Average Observations (Birds)")+
-  xlab("Month")+
-  theme(legend.position = "none")+ 
-  scale_x_discrete(labels = month.abb)
+ratio_df <- YRWA_daily_ratio %>%
+  select(month, value = observer_ratio) %>%
+  mutate(type = "Observer Ratio")
 
-ts_goose_decomp = decompose(ts_goose_cleaned, type = "additive")
+plot_df <- bind_rows(obs_df, ratio_df)
 
-goose_decomp_plot <- autoplot(ts_goose_decomp)+
-  ggtitle("Decomposition of Cleaned Canada Goose Data")+
-  theme_bw(base_size= 13)
+plot_df$month <- factor(plot_df$month, levels = 1:12)
 
-plot_grid(goose_monthly_dist, goose_decomp_plot, ncol = 2)
-
-``` 
-From the plot of distributions of monthly observations, the Canada Goose appears to have a slight seasonal pattern. However, consistency in observations year-round support the Canada Goose's resident species status. 
-
-The decomposition of the cleaned series also shows a strong seasonal pattern and trend. However the trend does not appear to have a consistent pattern over the course of the time series.  
-
-#### ACF and PACF
-
-The ACF and PACF were then plotted and assessed for initial modeling considerations (Figure X).
-
-```{r, echo = FALSE, warning= FALSE, fig.cap= "ACF and PACF plots for the cleaned monthly Canada Goose time series"}
-a <- autoplot(Acf(ts_goose_cleaned, lag.max = 50, plot = FALSE))+
-  ggtitle(" ")+
-  theme_bw(base_size= 13)
-b <- autoplot(Pacf(ts_goose_cleaned, lag.max = 50, plot = FALSE))+
-  ggtitle(" ")+
-  theme_bw(base_size= 13)
-
-plot_row <- plot_grid(a, b, ncol = 2)
-
-# now add the title
-title <- ggdraw() + 
-  draw_label(
-    "Cleaned Canada Goose Data: ACF and PACF",
-    x = 0,
-    hjust = 0,
-    vjust = 1
+# plot
+ggplot(plot_df, aes(x = month, y = value, fill = month)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  facet_wrap(~type, scales = "free_y") +
+  theme_bw(base_size = 13) +
+  scale_fill_manual(values = month_colors) +
+  scale_x_discrete(labels = month.abb) +
+  labs(
+    title = "Seasonal Patterns: Observations vs Observer Ratio",
+    x = "Month",
+    y = NULL
   ) +
   theme(
-    # add margin on the left of the drawing canvas,
-    # so title is aligned with left edge of first plot
-    plot.margin = margin(0, 0, 0, 0)
+    legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
   )
-plot_grid(
-  title, plot_row,
-  ncol = 1,
-  # rel_heights values control vertical title margins
-  rel_heights = c(0.09, 1)
+```
+
+
+```{r}
+autoplot(YRWA_obs_ts, series = "Observations") +
+  autolayer(YRWA_ratio_ts * max(YRWA_obs_ts), 
+            series = "Observer Ratio (scaled)") +
+  xlab("Time") +
+  ylab("Value") +
+  ggtitle("Comparison: Observations vs Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+
+#### Observation Time Series Model
+
+```{r}
+adf.test(YRWA_obs_ts)
+```
+
+```{r}
+ggAcf(YRWA_obs_ts)
+ggPacf(YRWA_obs_ts)
+```
+
+##### SARIMA
+```{r}
+fit_obs_sarima <- auto.arima(
+  YRWA_obs_ts,
+  seasonal = TRUE
 )
 
+summary(fit_obs_sarima)
+checkresiduals(fit_obs_sarima)
+```
+##### ARIMA +Fourier
+```{r}
+fit_obs_fourier <- auto.arima(
+  YRWA_obs_ts,
+  seasonal = FALSE,
+  xreg = fourier(YRWA_obs_ts, K = 2)
+)
 
+summary(fit_obs_fourier)
+checkresiduals(fit_obs_fourier)
 ```
 
-The ACF plot for the series shows a strong seasonality at lag 12, suggesting that models will either need to account for seasonality, or seasonality should be removed prior to modeling. The gradual decacy of the series also suggests stationarity, and that the series may require differencing. 
+##### ETS
+```{r}
+fit_obs_ets <- ets(YRWA_obs_ts)
 
-The PACF plot for the series has a clear cut off with only 1 significant lag. This behavior suggests the series has an autoregressive component. 
+summary(fit_obs_ets)
+checkresiduals(fit_obs_ets)
+```
 
-Based on observations from the decomposition of the series and the ACF and PACF, we thought that models accounting for seasonality would be best for the series. The initial models that were chosen were the SARIMA and the Basic Structural Model.  
+##### Train test split
+```{r}
+obs_train_ts <- window(YRWA_obs_ts, end = c(2024, 12))
+obs_test_ts  <- window(YRWA_obs_ts, start = c(2025, 1))
 
-    
-SARIMA
+h <- length(obs_test_ts)
 
-The SARIMA model was chosen for forecasting our series due to it's widely used and well established approach to time series analysis with seasonality. The autofit SARIMA model was calculated to be SARIMA(1,1,1)(1,0,0)[12]. The forecast of our data compared with the true observations for 2025 is shown in Figure X. 
+fit_obs_sarima_train <- auto.arima(obs_train_ts, seasonal = TRUE)
 
+fit_obs_fourier_train <- auto.arima(
+  obs_train_ts,
+  seasonal = FALSE,
+  xreg = fourier(obs_train_ts, K = 2)
+)
 
-```{r, echo = FALSE, warning= FALSE, message = FALSE}
-auto_sarima111_100_fit <- auto.arima(ts_goose_train)
-auto_sarima111_100_for <- forecast(auto_sarima111_100_fit, h = 12)
+fit_obs_ets_train <- ets(obs_train_ts)
+```
 
-autoplot(auto_sarima111_100_for, series = "Auto-SARIMA")+
-  autolayer(ts_goose_test, series = "True Observations")+
-  theme_bw(base_size= 13)+
-  xlim(2015, 2025)+
-  scale_x_continuous(breaks = seq(2015, 2025, by = 5))+
-  xlab("Time")+
-  ylab("Average Observations (Birds)")+
-  ggtitle("Auto-SARIMA Forecast") +
+##### Forecating
+```{r}
+fc_obs_sarima <- forecast(fit_obs_sarima_train, h = h)
+
+fc_obs_fourier <- forecast(
+  fit_obs_fourier_train,
+  xreg = fourier(obs_train_ts, K = 2, h = h)
+)
+
+fc_obs_ets <- forecast(fit_obs_ets_train, h = h)
+```
+
+```{r}
+autoplot(fc_obs_sarima) +
+  autolayer(obs_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("SARIMA Forecast vs Actual: YRWA Observations") +
+  theme_bw(base_size = 13) +
   theme(
-    legend.position = c(0.02, 0.98),  
-    legend.justification = c(0, 1),    
-    legend.title = element_blank())
-
-sarima111_100_scores <- accuracy(auto_sarima111_100_for$mean,goose_test)
-sarima111_100_scores
-
-
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
 ```
-
-
-#### BSM model
-
-The second model that was chosen for forecasting the Canada Goose data was the Basic Structural Model. This model was chosen due to its ability to both handle seasonality and to account for a localized trend. Because there did not appear to be a clear directional trend in the series, the BSM model was potentially a solution for modeling. The 2025 forecast of the BSM model compared with the true observations for 2025 is shown in Figure X. 
-
-```{r, echo = FALSE, warning= FALSE, message=FALSE}
-
-structs_nafix <- StructTS(ts_goose_train, type = "BSM",
-                         fixed=c(NA,NA,NA,NA))
-#Variances:
-#  level    slope   seas     epsilon  
-# 431.92     0.00    11.17   117.16
-
-
-#this function has convergence issues
-#checkresiduals(structs_nafix)
-
-#Generating forecasts
-# StructTS() does not call the forecast() internally so we need one more step
-auto_ss_for <- forecast(structs_nafix,h=12)
-#plot(auto_ss_for)
-
-SS_for1_score <- accuracy(auto_ss_for$mean,goose_test)
-SS_for1_score
-
-autoplot(auto_ss_for, series = "Auto-BSM")+
-  autolayer(ts_goose_test, series = "True Observations")+
-  theme_bw(base_size= 13)+
-  xlim(2015, 2025)+
-  scale_x_continuous(breaks = seq(2015, 2025, by = 5))+
-  xlab("Time")+
-  ylab("Average Observations (Birds)")+
-  ggtitle("Auto-BSM Forecast") +
+```{r}
+autoplot(fc_obs_fourier) +
+  autolayer(obs_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("ARIMA + Fourier Forecast vs Actual: YRWA Observations") +
+  theme_bw(base_size = 13) +
   theme(
-    legend.position = c(0.02, 0.98),  
-    legend.justification = c(0, 1),    
-    legend.title = element_blank())
-
-
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
 ```
 
-#### Comparison of Models
-
-After fitting and forecasting the SARIMA and BSM models separately, the results of the forecasting were plotted together for intitial comparison (Figure X). While both models were able to capture the general seasonality of the data, neither were able to predict the magnitude of the seasonal dip in the series. 
-
-```{r, echo = FALSE, warning= FALSE, message=FALSE, fig.cap= "Comparison of forecasts for 2025 Canada Goose Observations"}
-
-autoplot(ts_goose_test, series = "True Observations")+
-  autolayer(auto_sarima111_100_for,PI=FALSE, series = "Auto-SARIMA")+
-  autolayer(auto_ss_for,PI=FALSE, series= "Auto-BSM")+
-  theme_bw(base_size= 13)+
-  xlim(2024, 2025)+
-  scale_x_continuous(breaks = seq(2024, 2025, by = 1))+
-  xlab("Test Period (2024)")+
-  ylab("Average Observations (Birds)")+
-  ggtitle("Comparison Average Monthly Observation Forecasts")
-
-
+```{r}
+autoplot(fc_obs_ets) +
+  autolayer(obs_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("ETS Forecast vs Actual: YRWA Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
 ```
-To further compare the results of the forecasting models, error metrics were calculated for both models (Table X). These metrics included: Mean Error (ME), Root Mean Square Error (RMSE), Mean Absolute Error (MAE), Mean Percent Error (MPE), and Mean Absolute Percent Error (MAPE). The SARIMA model outperformed the BSM model in all error metrics with the exception of Mean Error (ME), making it the top performing model for the Canada Goose monthly observation data. 
 
-```{r, echo = FALSE, warning= FALSE}
+```{r}
+obs_plot_df <- data.frame(
+  Time = time(obs_test_ts),
+  Actual = as.numeric(obs_test_ts),
+  SARIMA = as.numeric(fc_obs_sarima$mean),
+  Fourier = as.numeric(fc_obs_fourier$mean),
+  ETS = as.numeric(fc_obs_ets$mean)
+) %>%
+  pivot_longer(
+    cols = c("SARIMA", "Fourier", "ETS"),
+    names_to = "Model",
+    values_to = "Forecast"
+  )
 
-goose_scores <- as.data.frame(rbind(SS_for1_score, sarima111_100_scores))
-row.names(goose_scores) <- c("Auto-BSM", "Auto-SARIMA")
 
-#choose model with lowest RMSE
-#best_model_index_goose <- which.min(goose_scores[,"RMSE"])
-#cat("The best model by RMSE is:", row.names(goose_scores[best_model_index_goose,])) 
+ggplot(obs_plot_df, aes(x = Time)) +
+  geom_line(aes(y = Actual), linewidth = 1.1, color = "black") +
+  geom_line(aes(y = Forecast, color = Model), linewidth = 1) +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Observed vs Forecasted YRWA Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
 
 
-kbl(goose_scores,
-    caption = "Forecasts for Monthly Canada Goose Observations",
-    digits = array(2, ncol(goose_scores))) %>%
-  kable_styling(
-    full_width = FALSE,
-    position = "center",
-    latex_options = c("hold_position", "striped")
+```{r}
+obs_sarima_acc <- accuracy(fc_obs_sarima, obs_test_ts)
+obs_fourier_acc <- accuracy(fc_obs_fourier, obs_test_ts)
+obs_ets_acc <- accuracy(fc_obs_ets, obs_test_ts)
+
+obs_acc_table <- rbind(
+  SARIMA = obs_sarima_acc[2, c("RMSE", "MAE", "MAPE", "MASE")],
+  Fourier_ARIMA = obs_fourier_acc[2, c("RMSE", "MAE", "MAPE", "MASE")],
+  ETS = obs_ets_acc[2, c("RMSE", "MAE", "MAPE", "MASE")]
+)
+
+obs_acc_df <- data.frame(
+  Model = rownames(obs_acc_table),
+  obs_acc_table,
+  row.names = NULL
+)
+
+obs_acc_df
+```
+
+```{r}
+best_rmse_model <- obs_acc_df$Model[which.min(obs_acc_df$RMSE)]
+best_mae_model <- obs_acc_df$Model[which.min(obs_acc_df$MAE)]
+best_mase_model <- obs_acc_df$Model[which.min(obs_acc_df$MASE)]
+
+best_rmse_model
+best_mae_model
+best_mase_model
+```
+```{r}
+# Final SARIMA model (full data)
+fit_obs_final <- auto.arima(
+  YRWA_obs_ts,
+  seasonal = TRUE
+)
+
+summary(fit_obs_final)
+checkresiduals(fit_obs_final)
+
+# forecast 24 months ahead
+fc_obs_final <- forecast(
+  fit_obs_final,
+  h = 12
+)
+
+autoplot(fc_obs_final) +
+  xlab("Time") +
+  ylab("Mean Observations") +
+  ggtitle("Final Forecast: YRWA Monthly Observations") +
+  theme_bw(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank()
   )
 
 ```
@@ -347,6 +456,186 @@ kbl(goose_scores,
 
 
 
+
+#### Ratio Modeling
+
+```{r}
+YRWA_ratio_ts_cleaned <- tsclean(YRWA_ratio_ts)
+
+autoplot(YRWA_ratio_ts, series = "Original Data") +
+  autolayer(YRWA_ratio_ts_cleaned, series = "Cleaned Data") +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("Outlier Removal (Not Recommended for Ratio Data)") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+```{r}
+#STL
+YRWA_ratio_stl <- stl(YRWA_ratio_ts, s.window = "periodic")
+
+autoplot(YRWA_ratio_stl)
+```
+
+
+##### ACF & PACF
+```{r}
+# ADF test
+adf.test(YRWA_ratio_ts)
+```
+
+
+```{r}
+ggAcf(YRWA_ratio_ts)
+ggPacf(YRWA_ratio_ts)
+```
+
+```{r}
+# train: 2015–2024
+YRWA_train_ts <- window(YRWA_ratio_ts, end = c(2024, 12))
+
+# test: 2024–2025
+YRWA_test_ts <- window(YRWA_ratio_ts, start = c(2025, 1))
+```
+
+##### SRIMA
+```{r}
+fit_ratio_sarima <- auto.arima(
+  YRWA_train_ts,
+  seasonal = TRUE
+)
+
+summary(fit_ratio_sarima)
+checkresiduals(fit_ratio_sarima)
+```
+
+##### ARIMA + Fourier
+```{r}
+fit_ratio_fourier <- auto.arima(
+  YRWA_train_ts,
+  seasonal = FALSE,
+  xreg = fourier(YRWA_train_ts, K = 2)
+)
+
+summary(fit_ratio_fourier)
+checkresiduals(fit_ratio_fourier)
+```
+
+##### ETS
+```{r}
+
+fit_ratio_ets <- ets(YRWA_train_ts)
+
+summary(fit_ratio_ets)
+checkresiduals(fit_ratio_ets)
+```
+
+
+
+##### forecasting
+```{r}
+h <- length(YRWA_test_ts)
+
+fc_ratio_sarima <- forecast(
+  fit_ratio_sarima,
+  h = h
+)
+
+fc_ratio_fourier <- forecast(
+  fit_ratio_fourier,
+  xreg = fourier(YRWA_train_ts, K = 2, h = h)
+)
+
+fc_ratio_ets <- forecast(
+  fit_ratio_ets,
+  h = h
+)
+```
+
+```{r}
+autoplot(fc_ratio_sarima) +
+  autolayer(YRWA_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("SARIMA Forecast vs Actual: YRWA Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+```{r}
+autoplot(fc_ratio_fourier) +
+  autolayer(YRWA_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("ARIMA + Fourier Forecast vs Actual: YRWA Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+```{r}
+autoplot(fc_ratio_ets) +
+  autolayer(YRWA_test_ts, series = "Actual") +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("ETS Forecast vs Actual: YRWA Observer Ratio") +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = c(0.02, 0.98),
+    legend.justification = c(0, 1),
+    legend.title = element_blank()
+  )
+```
+
+
+```{r}
+sarima_acc <- accuracy(fc_ratio_sarima, YRWA_test_ts)
+fourier_acc <- accuracy(fc_ratio_fourier, YRWA_test_ts)
+ets_acc <- accuracy(fc_ratio_ets, YRWA_test_ts)
+
+rbind(
+  SARIMA = sarima_acc[2, c("RMSE", "MAE", "MAPE", "MASE")],
+  Fourier_ARIMA = fourier_acc[2, c("RMSE", "MAE", "MAPE", "MASE")],
+  ETS = ets_acc[2, c("RMSE", "MAE", "MAPE", "MASE")]
+)
+```
+
+```{r}
+fit_ratio_sarima_final <- auto.arima(
+  YRWA_ratio_ts,
+  seasonal = TRUE
+)
+
+summary(fit_ratio_sarima_final)
+checkresiduals(fit_ratio_sarima_final)
+```
+
+```{r}
+h <- 12
+
+fc_ratio_final <- forecast(
+  fit_ratio_sarima_final,
+  h = h
+)
+
+autoplot(fc_ratio_final) +
+  xlab("Time") +
+  ylab("Observer Ratio") +
+  ggtitle("Forecast of YRWA Observer Ratio") +
+  theme_bw(base_size = 13)
+```
 
 ### Warbler + models / results
 
@@ -1131,219 +1420,4 @@ autoplot(fc_ratio_final) +
 The forecast accuracy results show that the SARIMA model performs best for the observer ratio series, with the lowest RMSE, MAE, and MASE. This result is consistent with the findings for the observation data. The ETS model performs slightly worse but remains comparable, while the ARIMA + Fourier model shows larger errors. 
 
 The selected SARIMA model captures the strong seasonal pattern in the observer ratio series, and residual diagnostics indicate a good fit with no significant remaining autocorrelation. The final 12-month forecast shows a clear continuation of the annual cycle, with smoother and more stable patterns than those observed in the raw observation data. Although uncertainty increases over time, the seasonal structure remains consistent, indicating that future trends are likely to follow similar dynamics.
-
-### Hummingbird models / results
-
-For the Ruby-throated Hummingbird analysis, I used monthly observation data and split it into training (2015-2024) and test (2025) periods to evaluate forecast performance.
-
-Before modeling, I cleaned the data and removed outliers using tsclean().
-
-```{r humm_load, include=FALSE}
-#load data
-humm_monthly <- read.csv("./Data/Cleaned_bySpecies/Hummingbird_Monthly.csv")
-humm_monthly <- humm_monthly %>%
-  mutate(date = as.Date(date)) %>%
-  filter(date >= as.Date("2015-01-01") & date <= as.Date("2025-12-31"))
-
-#split into train and test
-humm_train <- humm_monthly %>%
-  filter(date >= as.Date("2015-01-01") & date <= as.Date("2024-12-01"))
-
-humm_test <- humm_monthly %>%
-  filter(date >= as.Date("2025-01-01") & date <= as.Date("2025-12-01"))
-
-#create ts object for training data
-ts_humm_train <- ts(humm_train$mean_obs, start = c(2015, 1), frequency = 12)
-humm_test_obs <- humm_test$mean_obs
-```
-
-```{r humm_clean, echo=FALSE, fig.width=12, fig.height=5, fig.cap="Initial time series and outlier removal for monthly Ruby-throated Hummingbird data"}
-#original plot
-plot1 <- autoplot(ts_humm_train) +
-  xlab("Time") +
-  ylab("Mean Daily Observations") +
-  ggtitle("Monthly Hummingbird Data") +
-  theme_bw(base_size = 13) +
-  scale_x_continuous(breaks = seq(2015, 2025, by = 1))
-
-#remove outliers
-ts_humm_cleaned <- tsclean(ts_humm_train)
-
-#comparison plot
-plot2 <- autoplot(ts_humm_train, series = "Original Data") +
-  autolayer(ts_humm_cleaned, series = "Cleaned Data") +
-  xlab("Time") +
-  ylab("Mean Daily Observations") +
-  ggtitle("Outlier Removal: Monthly Hummingbird Data") +
-  theme_bw(base_size = 13) +
-  theme(legend.position = c(0.02, 0.98),
-        legend.justification = c(0, 1),
-        legend.title = element_blank())
-
-plot_grid(plot1, plot2, ncol = 2)
-```
-
-After cleaning, I calculated summary statistics. The data shows strong seasonal variation - observations are concentrated in summer breeding months (April-September) and drop to near-zero in winter when hummingbirds migrate south.
-
-```{r humm_stats, echo=FALSE}
-stats_table <- data.frame(mean_obs = as.numeric(ts_humm_cleaned)) %>%
-  summarise(
-    Mean = mean(mean_obs, na.rm = TRUE),
-    Median = median(mean_obs, na.rm = TRUE),
-    SD = sd(mean_obs, na.rm = TRUE),
-    Min = min(mean_obs, na.rm = TRUE),
-    Max = max(mean_obs, na.rm = TRUE),
-    `1st Quartile` = quantile(mean_obs, 0.25, na.rm = TRUE),
-    `3rd Quartile` = quantile(mean_obs, 0.75, na.rm = TRUE)
-  )
-
-kbl(stats_table,
-    caption = "Summary Statistics for Cleaned Monthly Hummingbird Observations",
-    digits = 2,
-    booktabs = TRUE) %>%
-  kable_styling(
-    latex_options = c("hold_position"),
-    full_width = FALSE,
-    position = "center"
-  )
-```
-
-To visualize the seasonal pattern, I plotted monthly distributions and decomposed the series.
-
-```{r humm_explore, echo=FALSE, fig.height=4, fig.width=14, fig.cap="Monthly distributions and decomposition of Ruby-throated Hummingbird time series"}
-#boxplot by month
-humm_train <- humm_train %>%
-  mutate(month = factor(month(date), levels = 1:12))
-
-boxplot <- ggplot(humm_train, aes(x = month, y = mean_obs)) +
-  geom_boxplot(fill = "steelblue", alpha = 0.6) +
-  xlab("Month") +
-  ylab("Mean Daily Observations") +
-  ggtitle("Monthly Hummingbird Observations (2015-2024)") +
-  scale_x_discrete(labels = month.abb) +
-  theme_bw(base_size = 13)
-
-#decomposition
-humm_decomp <- decompose(ts_humm_cleaned, type = "additive")
-decomp_plot <- autoplot(humm_decomp) +
-  ggtitle("Decomposition of Cleaned Hummingbird Data") +
-  theme_bw(base_size = 13)
-
-plot_grid(boxplot, decomp_plot, ncol = 2)
-```
-
-The boxplot confirms the hummingbird's summer migrant status - observations peak in breeding season (May-August) and are basically zero in winter. The decomposition shows a strong seasonal component with consistent annual pattern and no obvious long-term trend.
-
-#### ACF and PACF
-
-I examined the ACF and PACF to help with model selection (Figure X).
-
-```{r humm_acf, echo=FALSE, fig.cap="ACF and PACF for the cleaned monthly Ruby-throated Hummingbird series"}
-acf_plot <- autoplot(Acf(ts_humm_cleaned, lag.max = 50, plot = FALSE)) +
-  ggtitle(" ") +
-  theme_bw(base_size = 13)
-
-pacf_plot <- autoplot(Pacf(ts_humm_cleaned, lag.max = 50, plot = FALSE)) +
-  ggtitle(" ") +
-  theme_bw(base_size = 13)
-
-plot_row <- plot_grid(acf_plot, pacf_plot, ncol = 2)
-
-title <- ggdraw() + 
-  draw_label("Cleaned Hummingbird Data: ACF and PACF",
-    x = 0, hjust = 0, vjust = 1) +
-  theme(plot.margin = margin(0, 0, 0, 0))
-
-plot_grid(title, plot_row, ncol = 1, rel_heights = c(0.09, 1))
-```
-
-The ACF shows strong seasonal autocorrelation with significant spikes at lags 12, 24, and 36, which makes sense for annual patterns. The gradual decay suggests the series is non-stationary. The PACF has significant spikes at lags 1 and 12, indicating potential autoregressive components at both seasonal and non-seasonal scales.
-
-I used ndiffs() and nsdiffs() to determine differencing needs - the functions suggested one non-seasonal difference and one seasonal difference. Based on the strong seasonality in the decomposition and ACF/PACF patterns, I chose to use SARIMA models which can handle seasonal data.
-
-#### Auto SARIMA
-
-I used auto.arima() to automatically select the best SARIMA model.
-
-```{r humm_sarima, echo=FALSE}
-sarima_fit <- auto.arima(ts_humm_cleaned)
-```
-
-The function selected an ARIMA(2,0,1)(1,1,0)[12] model with two autoregressive terms, one moving average term, and one seasonal autoregressive term with seasonal differencing. I checked the residuals to make sure they looked like white noise - the Ljung-Box test gave a p-value of 0.39, which means the residuals passed the test (no significant autocorrelation left over).
-
-```{r humm_forecast, echo=FALSE}
-sarima_forecast <- forecast(sarima_fit, h = 12)
-```
-
-#### Seasonal Naive
-
-For comparison, I also fit a seasonal naive model as a simple benchmark. This method just uses last year's observation for the same month as the forecast.
-
-```{r humm_naive, echo=FALSE}
-naive_forecast <- snaive(ts_humm_cleaned, h = 12)
-```
-
-The seasonal naive residuals showed significant autocorrelation, especially at seasonal lags, suggesting it's leaving patterns on the table that SARIMA should be able to capture.
-
-#### Comparison of Models
-
-I compared both models' forecasts against the actual 2025 observations.
-
-```{r humm_compare, echo=FALSE, fig.cap="Forecast comparison for 2025 Ruby-throated Hummingbird observations"}
-ts_humm_test <- ts(humm_test_obs, start = c(2025, 1), frequency = 12)
-
-autoplot(ts_humm_test, series = "True Observations") +
-  autolayer(sarima_forecast, PI = FALSE, series = "Auto-SARIMA") +
-  autolayer(naive_forecast, PI = FALSE, series = "Seasonal Naive") +
-  xlab("Time") +
-  ylab("Mean Daily Observations") +
-  ggtitle("Forecast Comparison: Test Period (2025)") +
-  theme_bw(base_size = 13) +
-  xlim(2024, 2026) +
-  scale_x_continuous(breaks = seq(2024, 2026, by = 1)) +
-  theme(legend.position = c(0.15, 0.88),
-        legend.title = element_blank())
-```
-
-Both models capture the seasonal pattern of summer presence and winter absence. To quantify performance, I calculated error metrics.
-
-```{r humm_accuracy, echo=FALSE}
-sarima_scores <- accuracy(sarima_forecast$mean, humm_test_obs)
-naive_scores <- accuracy(naive_forecast$mean, humm_test_obs)
-
-scores <- as.data.frame(rbind(sarima_scores, naive_scores))
-row.names(scores) <- c("Auto-SARIMA", "Seasonal Naive")
-best_index <- which.min(scores[,"RMSE"])
-
-kbl(scores[, c("ME", "RMSE", "MAE", "MPE", "MAPE")],
-    caption = "Forecast Accuracy for Monthly Ruby-throated Hummingbird Observations",
-    digits = 2,
-    booktabs = TRUE) %>%
-  kable_styling(
-    latex_options = c("hold_position", "striped"),
-    full_width = FALSE,
-    position = "center",
-    stripe_index = best_index
-  )
-```
-
-The Auto-SARIMA model beat the Seasonal Naive benchmark on all the interpretable metrics. SARIMA got an RMSE of 2.06 vs 2.49 for Seasonal Naive - that's a 17% improvement. Note that MPE and MAPE have undefined values (NaN/Inf) for SARIMA because of division by zero when actual observations are zero in winter. Overall, SARIMA is the better model for hummingbird data and does a good job capturing the timing and magnitude of peak observations during breeding season.
-
-# Summary and Conclusions
-
-Im just brainstorming things to write about: 
-did all of us have similar models that forecasted well? 
-- which models worked best for each species if not
-
-Did the seasonal species models that worked work better?
-- would make sense if the resident species and migrant species had different best models ig
-
-Model performance for intial data vs observer normalized
-- I think im going to do like 3 models with the regular data and then like 3 with the observer normalized data/ compare the models that worked well for each/ did they change significantly
-
-
-
-
-
-
 
